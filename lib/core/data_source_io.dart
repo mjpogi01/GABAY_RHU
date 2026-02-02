@@ -1,4 +1,4 @@
-import '../data/sqlite_app_data_source.dart';
+import '../data/supabase_app_data_source.dart';
 import 'app_data_source.dart';
 
-AppDataSource createAppDataSource() => SqliteAppDataSource();
+AppDataSource createAppDataSource() => SupabaseAppDataSource();
