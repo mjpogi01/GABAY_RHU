@@ -71,7 +71,7 @@ class CertificateService {
               pw.Spacer(),
               pw.Text(
                 'Research & Public Health Intervention Tool',
-                style: pw.TextStyle(
+                style: const pw.TextStyle(
                   fontSize: 10,
                   color: PdfColors.grey700,
                 ),

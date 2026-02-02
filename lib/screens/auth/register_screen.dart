@@ -43,7 +43,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   if (picked != null) setState(() => _childDob = picked);
                 },
                 child: InputDecorator(
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Child\'s date of birth',
                     hintText: 'Tap to select',
                   ),
