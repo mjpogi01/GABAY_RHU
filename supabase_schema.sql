@@ -8,8 +8,25 @@ CREATE TABLE users (
   id UUID REFERENCES auth.users(id) PRIMARY KEY,
   anonymized_id TEXT UNIQUE NOT NULL,
   role TEXT NOT NULL DEFAULT 'parent',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  -- Profile fields (add if table already exists: use ALTER TABLE)
+  first_name TEXT,
+  last_name TEXT,
+  phone_number TEXT,
+  address TEXT,
+  status TEXT,
+  number_of_children INTEGER,
+  has_infant BOOLEAN
 );
+
+-- If users table already exists, run this migration:
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name TEXT;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number TEXT;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS number_of_children INTEGER;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS has_infant BOOLEAN;
 
 -- Children table
 CREATE TABLE children (

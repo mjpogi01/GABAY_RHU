@@ -99,6 +99,26 @@ class _MainShellState extends State<MainShell> {
                     const SizedBox(height: 4),
                     Text('Address: ${user!.address}'),
                   ],
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _isSupabaseConnected() ? Icons.cloud_done : Icons.cloud_off,
+                        size: 16,
+                        color: _isSupabaseConnected() ? Colors.green : Colors.red,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _isSupabaseConnected() ? '🟢 Connected' : '🔴 Not Connected',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _isSupabaseConnected() ? Colors.green : Colors.red,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -150,6 +170,16 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _openDrawer() => _scaffoldKey.currentState?.openEndDrawer();
+
+  bool _isSupabaseConnected() {
+    try {
+      // Check if Supabase is initialized and has a valid session
+      final supabase = Supabase.instance.client;
+      return supabase.auth.currentSession != null;
+    } catch (e) {
+      return false;
+    }
+  }
 
   Widget _buildBody() {
     if (_selectedDrawerItem == 'BABY_GUIDE') return const BabyGuideScreen();

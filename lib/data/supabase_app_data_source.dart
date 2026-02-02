@@ -21,9 +21,10 @@ class SupabaseAppDataSource implements AppDataSource {
         .from('users')
         .select()
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
-    return UserModel.fromJson(response);
+    if (response == null) return null;
+    return _userFromSupabase(response);
   }
 
   @override
@@ -31,23 +32,23 @@ class SupabaseAppDataSource implements AppDataSource {
     final user = _supabase.auth.currentUser;
     if (user == null) return null;
 
-    // Get current child from user preferences or a separate table
-    final response = await _supabase
+    final prefs = await _supabase
         .from('user_preferences')
         .select('current_child_id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
-    final childId = response['current_child_id'];
+    final childId = prefs?['current_child_id'];
     if (childId == null) return null;
 
     final childResponse = await _supabase
         .from('children')
         .select()
         .eq('id', childId)
-        .single();
+        .maybeSingle();
 
-    return ChildModel.fromJson(childResponse);
+    if (childResponse == null) return null;
+    return _childFromSupabase(childResponse);
   }
 
   @override
@@ -68,13 +69,55 @@ class SupabaseAppDataSource implements AppDataSource {
 
   @override
   Future<void> saveUser(UserModel user) async {
-    await _supabase.from('users').upsert(user.toJson());
+    await _supabase.from('users').upsert(_userToSupabase(user));
   }
+
+  static Map<String, dynamic> _userToSupabase(UserModel user) => {
+    'id': user.id,
+    'anonymized_id': user.anonymizedId,
+    'role': user.role,
+    'created_at': user.createdAt.toIso8601String(),
+    'first_name': user.firstName,
+    'last_name': user.lastName,
+    'phone_number': user.phoneNumber,
+    'address': user.address,
+    'status': user.status,
+    'number_of_children': user.numberOfChildren,
+    'has_infant': user.hasInfant,
+  };
+
+  static UserModel _userFromSupabase(Map<String, dynamic> r) => UserModel(
+    id: r['id'] as String,
+    anonymizedId: r['anonymized_id'] as String,
+    role: r['role'] as String,
+    createdAt: DateTime.parse(r['created_at'] as String),
+    firstName: r['first_name'] as String?,
+    lastName: r['last_name'] as String?,
+    phoneNumber: r['phone_number'] as String?,
+    address: r['address'] as String?,
+    status: r['status'] as String?,
+    numberOfChildren: r['number_of_children'] as int?,
+    hasInfant: r['has_infant'] as bool?,
+  );
 
   @override
   Future<void> saveChild(ChildModel child) async {
-    await _supabase.from('children').upsert(child.toJson());
+    await _supabase.from('children').upsert(_childToSupabase(child));
   }
+
+  static Map<String, dynamic> _childToSupabase(ChildModel c) => {
+    'id': c.id,
+    'caregiver_id': c.caregiverId,
+    'date_of_birth': c.dateOfBirth.toIso8601String().substring(0, 10),
+    'anonymized_child_id': c.anonymizedChildId,
+  };
+
+  static ChildModel _childFromSupabase(Map<String, dynamic> r) => ChildModel(
+    id: r['id'] as String,
+    caregiverId: r['caregiver_id'] as String,
+    dateOfBirth: DateTime.parse(r['date_of_birth'] as String),
+    anonymizedChildId: r['anonymized_child_id'] as String?,
+  );
 
   @override
   Future<void> logout() async {

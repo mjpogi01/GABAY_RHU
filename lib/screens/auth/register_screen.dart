@@ -18,9 +18,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneController = TextEditingController();
   final _otpController = TextEditingController();
   DateTime? _childDob;
+  bool _showOtpField = false;
   bool _isLoading = false;
-  bool _otpSent = false;
-  String? _verificationId;
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _otpController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +48,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 controller: _phoneController,
                 decoration: const InputDecoration(
                   labelText: 'Phone Number',
-                  hintText: '+63XXXXXXXXXX',
+                  hintText: '+639XXXXXXXXX',
+                  prefixIcon: Icon(Icons.phone),
                 ),
                 keyboardType: TextInputType.phone,
                 validator: (value) {
@@ -50,18 +57,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     return 'Please enter your phone number';
                   }
                   if (!RegExp(r'^\+[1-9]\d{1,14}$').hasMatch(value)) {
-                    return 'Please enter a valid phone number (e.g., +639123456789)';
+                    return 'Please enter a valid phone number with country code';
                   }
                   return null;
                 },
               ),
               const SizedBox(height: 16),
-              if (_otpSent)
+              if (_showOtpField) ...[
                 TextFormField(
                   controller: _otpController,
                   decoration: const InputDecoration(
                     labelText: 'OTP Code',
-                    hintText: 'Enter the 6-digit code',
+                    hintText: 'Enter 6-digit code',
+                    prefixIcon: Icon(Icons.lock),
                   ),
                   keyboardType: TextInputType.number,
                   maxLength: 6,
@@ -75,7 +83,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     return null;
                   },
                 ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 16),
+              ],
               InkWell(
                 onTap: () async {
                   final picked = await showDatePicker(
@@ -87,7 +96,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   if (picked != null) setState(() => _childDob = picked);
                 },
                 child: InputDecorator(
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Child\'s date of birth',
                     hintText: 'Tap to select',
                   ),
@@ -107,7 +116,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Text(_otpSent ? 'Verify OTP' : 'Send OTP'),
+                    : Text(_showOtpField ? 'Verify & Register' : 'Send OTP'),
               ),
             ],
           ),
@@ -118,54 +127,62 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_childDob == null) return;
 
     setState(() => _isLoading = true);
 
     try {
-      if (!_otpSent) {
-        // Send OTP to phone number
+      if (!_showOtpField) {
+        // Send OTP
         await Supabase.instance.client.auth.signInWithOtp(
           phone: _phoneController.text.trim(),
         );
-        setState(() => _otpSent = true);
+        setState(() => _showOtpField = true);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('OTP sent to your phone')),
+        );
       } else {
-        // Verify OTP and create account
+        // Verify OTP and register
+        if (_childDob == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please select child\'s date of birth')),
+          );
+          return;
+        }
+
         final response = await Supabase.instance.client.auth.verifyOTP(
           phone: _phoneController.text.trim(),
           token: _otpController.text.trim(),
           type: OtpType.sms,
         );
 
-        if (response.user == null) {
-          throw Exception('Failed to verify OTP');
+        if (response.user != null) {
+          // Create user and child records
+          final provider = context.read<AppProvider>();
+          final ts = DateTime.now().millisecondsSinceEpoch;
+          final user = UserModel(
+            id: response.user!.id,
+            anonymizedId: 'anon_$ts',
+            role: 'parent',
+            createdAt: DateTime.now(),
+          );
+          final child = ChildModel(
+            id: 'child_$ts',
+            caregiverId: user.id,
+            dateOfBirth: _childDob!,
+          );
+          await provider.setUserAndChild(user, child);
+          if (!context.mounted) return;
+          Navigator.pushReplacementNamed(context, AppRoutes.preTest);
         }
-
-        final provider = context.read<AppProvider>();
-        final user = UserModel(
-          id: response.user!.id,
-          anonymizedId: 'anon_${response.user!.id.substring(0, 8)}',
-          role: 'parent',
-          createdAt: DateTime.now(),
-        );
-        final child = ChildModel(
-          id: 'child_${response.user!.id}',
-          caregiverId: user.id,
-          dateOfBirth: _childDob!,
-        );
-
-        await provider.setUserAndChild(user, child);
-
-        if (!context.mounted) return;
-        Navigator.pushReplacementNamed(context, AppRoutes.preTest);
       }
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Registration failed: ${e.toString()}')),
+        SnackBar(content: Text('Error: ${e.toString()}')),
       );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      setState(() => _isLoading = false);
     }
   }
 }

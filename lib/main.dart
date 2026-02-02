@@ -6,21 +6,21 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme.dart';
 import 'core/app_routes.dart';
 import 'core/data_source_factory.dart';
+import 'core/supabase_config.dart';
 import 'providers/app_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize Supabase
-  await Supabase.initialize(
-    url: 'https://pttvxcsrgljcvvfdplrw.supabase.co',
-    anonKey: 'sb_publishable_b6outFkUxt9LQ_xIfUrXog_nTubIZag',
-  );
-
   if (!kIsWeb) {
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
     ]);
+  }
+  if (SupabaseConfig.isConfigured) {
+    await Supabase.initialize(
+      url: SupabaseConfig.url,
+      anonKey: SupabaseConfig.anonKey,
+    );
   }
   runApp(const GabayApp());
 }

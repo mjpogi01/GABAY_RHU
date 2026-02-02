@@ -36,13 +36,13 @@ dependencies:
   
   # Connectivity check (for sync)
   connectivity_plus: ^6.0.5
+
+  # Supabase (phone auth, backend)
+  supabase_flutter: ^2.8.0
   
   # UI utilities
   cupertino_icons: ^1.0.8
   google_fonts: ^6.2.1
-
-  # Supabase for auth and database
-  supabase_flutter: ^2.5.8
 
 dev_dependencies:
   flutter_test:

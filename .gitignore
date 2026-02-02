@@ -13,7 +13,6 @@ android/local.properties
 android/**/gradle-wrapper.jar
 *.apk
 *.aab
-*.hprof
 
 # iOS
 ios/Pods/

@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_routes.dart';
 import '../../core/constants.dart';
+import '../../core/supabase_config.dart';
 import '../../providers/app_provider.dart';
 import '../../models/user_model.dart';
 import '../../models/child_model.dart';
+import '../../services/phone_auth_service.dart';
 
 /// Auth screen with Sign In / Sign Up toggle
 /// Design: GABAY branding, red primary, tagline
@@ -37,6 +39,12 @@ class _AuthScreenState extends State<AuthScreen> {
   bool? _hasInfant;
   int _signUpStep = 0;
 
+  // Phone OTP flow
+  bool _otpSent = false;
+  final _otpController = TextEditingController();
+  bool _isLoading = false;
+  String? _authError;
+
   @override
   void dispose() {
     _phoneController.dispose();
@@ -49,6 +57,7 @@ class _AuthScreenState extends State<AuthScreen> {
     _ageController.dispose();
     _addressController.dispose();
     _numberOfChildrenController.dispose();
+    _otpController.dispose();
     super.dispose();
   }
 
@@ -152,43 +161,55 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _buildSignInForm() {
+    final usePhoneAuth = SupabaseConfig.isConfigured;
+
+    if (usePhoneAuth && _otpSent) {
+      return _buildOtpForm(_phoneController.text, _signInWithOtp);
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         TextFormField(
           controller: _phoneController,
-          decoration: const InputDecoration(
-            hintText: 'Phone Number',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            hintText: 'Phone Number (e.g. 09171234567)',
+            border: const OutlineInputBorder(),
+            prefixText: usePhoneAuth ? '+63 ' : null,
           ),
           keyboardType: TextInputType.phone,
           validator: (v) => (v == null || v.isEmpty) ? 'Enter phone number' : null,
+          enabled: !_isLoading,
         ),
-        const SizedBox(height: 16),
-        TextFormField(
-          controller: _passwordController,
-          decoration: const InputDecoration(
-            hintText: 'Password',
-            border: OutlineInputBorder(),
+        if (!usePhoneAuth) ...[
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _passwordController,
+            decoration: const InputDecoration(
+              hintText: 'Password',
+              border: OutlineInputBorder(),
+            ),
+            obscureText: true,
+            validator: (v) => (v == null || v.isEmpty) ? 'Enter password' : null,
           ),
-          obscureText: true,
-          validator: (v) => (v == null || v.isEmpty) ? 'Enter password' : null,
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(
-            onPressed: () {
-              // TODO: Forgot password
-            },
-            child: const Text('Forgot Password?', style: TextStyle(color: Colors.blue)),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () {},
+              child: const Text('Forgot Password?', style: TextStyle(color: Colors.blue)),
+            ),
           ),
-        ),
+        ],
+        if (_authError != null) ...[
+          const SizedBox(height: 8),
+          Text(_authError!, style: const TextStyle(color: Colors.red, fontSize: 14)),
+        ],
         const SizedBox(height: 16),
         SizedBox(
           height: 52,
           child: ElevatedButton(
-            onPressed: _signIn,
+            onPressed: _isLoading ? null : () => usePhoneAuth ? _sendOtp(context) : _signIn(),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFD32F2F),
               foregroundColor: Colors.white,
@@ -197,7 +218,13 @@ class _AuthScreenState extends State<AuthScreen> {
                 side: const BorderSide(color: Colors.black),
               ),
             ),
-            child: const Text('Log In'),
+            child: _isLoading
+                ? const SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                  )
+                : Text(usePhoneAuth && !_otpSent ? 'Send OTP' : 'Log In'),
           ),
         ),
         const SizedBox(height: 16),
@@ -206,8 +233,83 @@ class _AuthScreenState extends State<AuthScreen> {
           children: [
             const Text("Don't have account? "),
             TextButton(
-              onPressed: () => setState(() => _isSignUp = true),
+              onPressed: () => setState(() {
+                _isSignUp = true;
+                _otpSent = false;
+                _authError = null;
+              }),
               child: const Text('Sign Up', style: TextStyle(color: Colors.blue)),
+            ),
+          ],
+        ),
+        if (SupabaseConfig.isConfigured)
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: TextButton(
+              onPressed: () => _demoLogin(context),
+              child: const Text('Demo Login (skip phone auth)', style: TextStyle(color: Colors.grey)),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildOtpForm(String phone, Future<void> Function() onVerify) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Enter the 6-digit code sent to $phone',
+          style: TextStyle(color: Colors.grey.shade700),
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _otpController,
+          decoration: const InputDecoration(
+            hintText: '000000',
+            border: OutlineInputBorder(),
+          ),
+          keyboardType: TextInputType.number,
+          maxLength: 6,
+          validator: (v) => (v == null || v.length != 6) ? 'Enter 6-digit code' : null,
+          enabled: !_isLoading,
+        ),
+        if (_authError != null) ...[
+          const SizedBox(height: 8),
+          Text(_authError!, style: const TextStyle(color: Colors.red, fontSize: 14)),
+        ],
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            TextButton(
+              onPressed: _isLoading ? null : () => setState(() {
+                _otpSent = false;
+                _otpController.clear();
+                _authError = null;
+              }),
+              child: const Text('Change number'),
+            ),
+            const Spacer(),
+            SizedBox(
+              height: 52,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : () => onVerify(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD32F2F),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: Colors.black),
+                  ),
+                ),
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : const Text('Verify'),
+              ),
             ),
           ],
         ),
@@ -215,46 +317,111 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  Future<void> _sendOtp(BuildContext context) async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _isLoading = true;
+      _authError = null;
+    });
+    try {
+      await PhoneAuthService.sendOtp(_phoneController.text);
+      if (!context.mounted) return;
+      setState(() {
+        _otpSent = true;
+        _isLoading = false;
+        _authError = null;
+      });
+    } catch (e) {
+      if (!context.mounted) return;
+      setState(() {
+        _isLoading = false;
+        _authError = e.toString().replaceAll('Exception:', '').trim();
+      });
+    }
+  }
+
+  Future<void> _signInWithOtp() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _isLoading = true;
+      _authError = null;
+    });
+    try {
+      await PhoneAuthService.verifyOtp(_phoneController.text, _otpController.text);
+      if (!context.mounted) return;
+      final provider = context.read<AppProvider>();
+      await provider.init(); // Refresh from Supabase
+      if (!context.mounted) return;
+      if (provider.preTestResult == null) {
+        Navigator.pushReplacementNamed(context, AppRoutes.preTest);
+      } else {
+        Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      setState(() {
+        _isLoading = false;
+        _authError = e.toString().replaceAll('Exception:', '').trim();
+      });
+    }
+  }
+
   Widget _buildSignUpForm() {
+    final usePhoneAuth = SupabaseConfig.isConfigured;
+
+    if (usePhoneAuth && _otpSent) {
+      return _buildOtpForm(_signUpPhoneController.text, _signUpWithOtp);
+    }
+
     if (_signUpStep == 0) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           TextFormField(
             controller: _signUpPhoneController,
-            decoration: const InputDecoration(
-              hintText: 'Phone Number',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              hintText: 'Phone Number (e.g. 09171234567)',
+              border: const OutlineInputBorder(),
+              prefixText: usePhoneAuth ? '+63 ' : null,
             ),
             keyboardType: TextInputType.phone,
             validator: (v) => (v == null || v.isEmpty) ? 'Enter phone number' : null,
           ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _signUpPasswordController,
-            decoration: const InputDecoration(
-              hintText: 'Password',
-              border: OutlineInputBorder(),
+          if (!usePhoneAuth) ...[
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _signUpPasswordController,
+              decoration: const InputDecoration(
+                hintText: 'Password',
+                border: OutlineInputBorder(),
+              ),
+              obscureText: true,
+              validator: (v) => (v == null || v.isEmpty) ? 'Enter password' : null,
             ),
-            obscureText: true,
-            validator: (v) => (v == null || v.isEmpty) ? 'Enter password' : null,
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _confirmPasswordController,
-            decoration: const InputDecoration(
-              hintText: 'Confirm Password',
-              border: OutlineInputBorder(),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _confirmPasswordController,
+              decoration: const InputDecoration(
+                hintText: 'Confirm Password',
+                border: OutlineInputBorder(),
+              ),
+              obscureText: true,
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Confirm password';
+                if (v != _signUpPasswordController.text) return 'Passwords do not match';
+                return null;
+              },
             ),
-            obscureText: true,
-            validator: (v) {
-              if (v == null || v.isEmpty) return 'Confirm password';
-              if (v != _signUpPasswordController.text) return 'Passwords do not match';
-              return null;
-            },
-          ),
+          ],
+          if (_authError != null) ...[
+            const SizedBox(height: 8),
+            Text(_authError!, style: const TextStyle(color: Colors.red, fontSize: 14)),
+          ],
           const SizedBox(height: 24),
-          _nextButton('Next', () => setState(() => _signUpStep = 1)),
+          _nextButton(
+            'Next',
+            usePhoneAuth ? _sendSignUpOtp : () => setState(() => _signUpStep = 1),
+          ),
         ],
       );
     }
@@ -374,6 +541,53 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  Future<void> _sendSignUpOtp() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _isLoading = true;
+      _authError = null;
+    });
+    try {
+      await PhoneAuthService.sendOtp(_signUpPhoneController.text);
+      if (!mounted) return;
+      setState(() {
+        _otpSent = true;
+        _isLoading = false;
+        _authError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _authError = e.toString().replaceAll('Exception:', '').trim();
+      });
+    }
+  }
+
+  Future<void> _signUpWithOtp() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _isLoading = true;
+      _authError = null;
+    });
+    try {
+      await PhoneAuthService.verifyOtp(_signUpPhoneController.text, _otpController.text);
+      if (!mounted) return;
+      setState(() {
+        _otpSent = false;
+        _otpController.clear();
+        _signUpStep = 1;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _authError = e.toString().replaceAll('Exception:', '').trim();
+      });
+    }
+  }
+
   Widget _nextButton(String label, VoidCallback onPressed) {
     return SizedBox(
       height: 52,
@@ -394,15 +608,25 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _signIn() async {
     if (!_formKey.currentState!.validate()) return;
-    await _demoLogin(context);
+    if (SupabaseConfig.isConfigured) {
+      await _sendOtp(context);
+    } else {
+      await _demoLogin(context);
+    }
   }
 
   Future<void> _signUp() async {
     if (!_formKey.currentState!.validate()) return;
     final provider = context.read<AppProvider>();
     final ts = DateTime.now().millisecondsSinceEpoch;
+    String userId;
+    if (SupabaseConfig.isConfigured && PhoneAuthService.currentUser != null) {
+      userId = PhoneAuthService.currentUser!.id;
+    } else {
+      userId = 'user_$ts';
+    }
     final user = UserModel(
-      id: 'user_$ts',
+      id: userId,
       anonymizedId: 'anon_$ts',
       role: 'parent',
       createdAt: DateTime.now(),
