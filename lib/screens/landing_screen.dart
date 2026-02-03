@@ -34,21 +34,35 @@ class LandingScreen extends StatelessWidget {
                     children: [
                       _buildLogo(context),
                       SizedBox(height: DesignSystem.spacingMedium(context)),
-                      Text(
-                        AppConstants.appName,
-                        style: TextStyle(
-                          fontSize: 24 * scale,
-                          fontWeight: FontWeight.w600,
-                          color: DesignSystem.textPrimary,
+                      Hero(
+                        tag: 'app_name',
+                        transitionOnUserGestures: true,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Text(
+                            AppConstants.appName,
+                            style: TextStyle(
+                              fontSize: 24 * scale,
+                              fontWeight: FontWeight.w600,
+                              color: DesignSystem.textPrimary,
+                            ),
+                          ),
                         ),
                       ),
                       SizedBox(height: DesignSystem.spacingSmall(context)),
-                      Text(
-                        AppConstants.appTaglineLanding,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: DesignSystem.bodyTextSize(context),
-                          color: DesignSystem.textSecondary,
+                      Hero(
+                        tag: 'app_tagline',
+                        transitionOnUserGestures: true,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Text(
+                            AppConstants.appTaglineLanding,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: DesignSystem.bodyTextSize(context),
+                              color: DesignSystem.textSecondary,
+                            ),
+                          ),
                         ),
                       ),
                       SizedBox(height: DesignSystem.spacingSection(context)),
@@ -101,29 +115,37 @@ class LandingScreen extends StatelessWidget {
 
   Widget _buildLogo(BuildContext context) {
     final scale = DesignSystem.scale(context);
-    return SizedBox(
-      height: 64,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Text(
-            'G',
-            style: TextStyle(
-              fontSize: 48 * scale,
-              fontWeight: FontWeight.bold,
-              color: DesignSystem.primary,
-            ),
+    return Hero(
+      tag: 'app_logo',
+      transitionOnUserGestures: true,
+      child: Material(
+        color: Colors.transparent,
+        child: SizedBox(
+          height: 64 * scale,
+          width: 64 * scale,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Text(
+                'G',
+                style: TextStyle(
+                  fontSize: 48 * scale,
+                  fontWeight: FontWeight.bold,
+                  color: DesignSystem.primary,
+                ),
+              ),
+              Positioned(
+                top: 0,
+                right: 4,
+                child: Icon(
+                  Icons.light_mode,
+                  color: DesignSystem.accentYellow,
+                  size: 24 * scale,
+                ),
+              ),
+            ],
           ),
-          Positioned(
-            top: 0,
-            right: 4,
-            child: Icon(
-              Icons.light_mode,
-              color: DesignSystem.accentYellow,
-              size: 24,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

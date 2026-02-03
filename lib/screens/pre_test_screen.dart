@@ -139,18 +139,23 @@ class _PreTestScreenState extends State<PreTestScreen> {
                       )
                     else
                       const SizedBox.shrink(),
-                    ElevatedButton(
-                      onPressed: () {
-                        if (_currentIndex < _questions.length - 1) {
-                          setState(() => _currentIndex++);
-                        } else {
-                          _submit();
-                        }
-                      },
-                      child: Text(
-                        _currentIndex < _questions.length - 1
-                            ? 'Next'
-                            : 'Submit',
+                    Flexible(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            if (_currentIndex < _questions.length - 1) {
+                              setState(() => _currentIndex++);
+                            } else {
+                              _submit();
+                            }
+                          },
+                          child: Text(
+                            _currentIndex < _questions.length - 1
+                                ? 'Next'
+                                : 'Submit',
+                          ),
+                        ),
                       ),
                     ),
                   ],

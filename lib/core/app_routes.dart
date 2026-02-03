@@ -36,8 +36,22 @@ class AppRoutes {
       case login:
       case register:
         final args = settings.arguments as Map<String, dynamic>?;
-        return MaterialPageRoute(
-          builder: (_) => AuthScreen(initialIsSignUp: args?['isSignUp'] as bool? ?? false),
+        return PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              AuthScreen(initialIsSignUp: args?['isSignUp'] as bool? ?? false),
+          transitionDuration: const Duration(milliseconds: 1500),
+          reverseTransitionDuration: const Duration(milliseconds: 1500),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            // Use FadeTransition for the page itself, Hero widgets handle their own transitions
+            // The Hero animation duration matches this route's transition duration
+            return FadeTransition(
+              opacity: CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeInOut,
+              ),
+              child: child,
+            );
+          },
         );
       case dashboard:
         return MaterialPageRoute(builder: (_) => const MainShell());

@@ -4,9 +4,8 @@ import '../models/module_model.dart';
 import '../core/app_routes.dart';
 import '../core/design_system.dart';
 import '../providers/app_provider.dart';
-import '../services/adaptive_learning_service.dart';
 
-/// Home/Dashboard - Design: Hello [Name], GabayAI, Modules tabs, Assessment cards
+/// Home/Dashboard - Standardized layout matching design
 class DashboardScreen extends StatelessWidget {
   final VoidCallback? onAvatarTap;
 
@@ -15,7 +14,7 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.grey.shade50,
+      color: DesignSystem.background,
       child: Consumer<AppProvider>(
         builder: (context, provider, _) {
           final userName = provider.user?.displayName ?? 'User';
@@ -23,19 +22,22 @@ class DashboardScreen extends StatelessWidget {
               ? (provider.preTestResult!.overallScore * 100).round()
               : null;
           final postTestAvailable = provider.canAccessPostTest;
-          final postTestDate = provider.preTestResult != null
-              ? provider.preTestResult!.completedAt
-                  .add(const Duration(days: 60))
-              : null;
+          final postTestDate = provider.preTestResult?.completedAt
+                  .add(const Duration(days: 60));
 
-          return Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: DesignSystem.maxContentWidth),
-              child: CustomScrollView(
-                slivers: [
+          // Build module tabs list
+          final allModules = provider.assignedModules;
+          
+          return CustomScrollView(
+            slivers: [
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+                  padding: EdgeInsets.fromLTRB(
+                    DesignSystem.s(context, 24),
+                    MediaQuery.of(context).padding.top + DesignSystem.s(context, 16),
+                    DesignSystem.s(context, 24),
+                    DesignSystem.s(context, 4),
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -43,47 +45,63 @@ class DashboardScreen extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Hello, $userName',
-                                style: const TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.bold,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Hello, $userName',
+                                  style: TextStyle(
+                                    fontSize: DesignSystem.s(context, 28),
+                                    fontWeight: FontWeight.bold,
+                                    color: DesignSystem.textPrimary,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Welcome To GABAY',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.grey.shade600,
+                                SizedBox(height: DesignSystem.s(context, 4)),
+                                RichText(
+                                  text: TextSpan(
+                                    style: TextStyle(
+                                      fontSize: DesignSystem.sectionTitleSize(context),
+                                      color: DesignSystem.textSecondary,
+                                    ),
+                                    children: [
+                                      const TextSpan(text: 'Welcome To '),
+                                      TextSpan(
+                                        text: 'GABAY',
+                                        style: TextStyle(
+                                          color: DesignSystem.textPrimary,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
+                          SizedBox(width: DesignSystem.s(context, 12)),
                           GestureDetector(
                             onTap: onAvatarTap,
                             child: CircleAvatar(
-                              radius: 24,
+                              radius: DesignSystem.s(context, 24),
                               backgroundColor: Colors.amber.shade200,
                               child: Icon(
                                 Icons.person,
                                 color: Colors.grey.shade700,
+                                size: DesignSystem.s(context, 24),
                               ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: DesignSystem.spacingMedium(context)),
                       // GabayAI search bar
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        padding: DesignSystem.inputPadding,
                         decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade300),
+                          color: DesignSystem.cardSurface,
+                          borderRadius: BorderRadius.circular(DesignSystem.inputBorderRadius),
+                          border: Border.all(color: DesignSystem.inputBorder),
                         ),
                         child: Row(
                           children: [
@@ -91,26 +109,78 @@ class DashboardScreen extends StatelessWidget {
                               child: Text(
                                 'Ask GabayAI your questions.',
                                 style: TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.grey.shade600,
+                                  fontSize: DesignSystem.inputTextSize(context),
+                                  color: DesignSystem.textMuted,
                                   fontStyle: FontStyle.italic,
                                 ),
                               ),
                             ),
-                            Icon(Icons.send, color: Colors.grey.shade600),
+                            SizedBox(width: DesignSystem.s(context, 8)),
+                            Icon(
+                              Icons.send,
+                              color: DesignSystem.textMuted,
+                              size: DesignSystem.s(context, 20),
+                            ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 32),
-                      // Modules section
-                      const Text(
-                        'Modules',
+                    ],
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: SizedBox(height: DesignSystem.spacingSmall(context)),
+              ),
+              // Assessment section
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: DesignSystem.s(context, 24)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Assessment',
                         style: TextStyle(
-                          fontSize: 20,
+                          fontSize: DesignSystem.sectionTitleSize(context),
                           fontWeight: FontWeight.bold,
+                          color: DesignSystem.textPrimary,
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: DesignSystem.spacingSmall(context)),
+                      _AssessmentCard(
+                        title: 'Pre-Test',
+                        isFinished: provider.hasCompletedPreTest,
+                        score: preTestScore,
+                      ),
+                      SizedBox(height: DesignSystem.spacingSmall(context)),
+                      _AssessmentCard(
+                        title: 'Post-Test',
+                        isFinished: provider.hasCompletedPostTest,
+                        availableDate: postTestAvailable ? postTestDate : null,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: SizedBox(height: DesignSystem.spacingLarge(context)),
+              ),
+              // Modules section
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: DesignSystem.s(context, 24)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Modules',
+                        style: TextStyle(
+                          fontSize: DesignSystem.sectionTitleSize(context),
+                          fontWeight: FontWeight.bold,
+                          color: DesignSystem.textPrimary,
+                        ),
+                      ),
+                      SizedBox(height: DesignSystem.spacingSmall(context)),
                     ],
                   ),
                 ),
@@ -118,36 +188,35 @@ class DashboardScreen extends StatelessWidget {
               // Module tabs (horizontal scroll)
               SliverToBoxAdapter(
                 child: SizedBox(
-                  height: 44,
+                  height: DesignSystem.s(context, 44),
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    itemCount: provider.assignedModules.isEmpty
-                        ? 1
-                        : provider.assignedModules.length + 1,
+                    padding: EdgeInsets.symmetric(horizontal: DesignSystem.s(context, 24)),
+                    itemCount: 5, // Module 1-5
                     itemBuilder: (context, i) {
-                      final label = i == 0
-                          ? 'All'
-                          : 'Module ${provider.assignedModules[i - 1].order}';
-                      final isSelected = i == 0;
+                      final moduleNumber = i + 1;
+                      final isSelected = moduleNumber == 2; // Module 2 is selected
+                      
                       return Padding(
-                        padding: const EdgeInsets.only(right: 8),
+                        padding: EdgeInsets.only(right: DesignSystem.s(context, 8)),
                         child: Material(
-                          color: isSelected
-                              ? Colors.grey.shade700
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(8),
+                          color: isSelected ? DesignSystem.textPrimary : Colors.transparent,
+                          borderRadius: BorderRadius.circular(DesignSystem.s(context, 8)),
                           child: InkWell(
                             onTap: () {},
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(DesignSystem.s(context, 8)),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: DesignSystem.s(context, 16),
+                                vertical: DesignSystem.s(context, 12),
+                              ),
                               alignment: Alignment.center,
                               child: Text(
-                                label,
+                                'Module $moduleNumber',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w600,
-                                  color: isSelected ? Colors.white : Colors.black87,
+                                  fontSize: DesignSystem.bodyTextSize(context),
+                                  color: isSelected ? Colors.white : DesignSystem.textSecondary,
                                 ),
                               ),
                             ),
@@ -158,34 +227,50 @@ class DashboardScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              const SliverToBoxAdapter(child: SizedBox(height: 16)),
-              // Module cards (horizontal carousel)
+              SliverToBoxAdapter(
+                child: SizedBox(height: DesignSystem.spacingMedium(context)),
+              ),
+              // Module cards (horizontal scrollable)
               SliverToBoxAdapter(
                 child: SizedBox(
-                  height: 200,
-                  child: provider.assignedModules.isEmpty
-                      ? Center(
-                          child: Text(
-                            'No modules assigned. Complete pre-test first.',
-                            style: TextStyle(color: Colors.grey.shade600),
+                  height: DesignSystem.s(context, 200),
+                  child: allModules.isEmpty
+                      ? Padding(
+                          padding: EdgeInsets.symmetric(horizontal: DesignSystem.s(context, 24)),
+                          child: Container(
+                            padding: EdgeInsets.all(DesignSystem.spacingLarge(context)),
+                            decoration: BoxDecoration(
+                              color: DesignSystem.cardSurface,
+                              borderRadius: BorderRadius.circular(DesignSystem.s(context, 16)),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'No modules assigned yet.',
+                                style: TextStyle(
+                                  color: DesignSystem.textMuted,
+                                  fontSize: DesignSystem.bodyTextSize(context),
+                                ),
+                              ),
+                            ),
                           ),
                         )
                       : ListView.builder(
                           scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          itemCount: provider.assignedModules.length,
+                          padding: EdgeInsets.symmetric(horizontal: DesignSystem.s(context, 24)),
+                          itemCount: allModules.length,
                           itemBuilder: (context, i) {
-                            final m = provider.assignedModules[i];
-                            final done = provider.completedModuleIds.contains(m.id);
+                            final module = allModules[i];
+                            final isCompleted = provider.completedModuleIds.contains(module.id);
                             return Padding(
-                              padding: const EdgeInsets.only(right: 16),
-                              child: _ModuleCard(
-                                module: m,
-                                isCompleted: done,
-                                onTap: () => Navigator.pushNamed(
+                              padding: EdgeInsets.only(right: DesignSystem.spacingMedium(context)),
+                              child: _buildModuleDetailCard(
+                                context,
+                                module,
+                                isCompleted,
+                                () => Navigator.pushNamed(
                                   context,
                                   AppRoutes.module,
-                                  arguments: {'moduleId': m.id},
+                                  arguments: {'moduleId': module.id},
                                 ),
                               ),
                             );
@@ -193,123 +278,38 @@ class DashboardScreen extends StatelessWidget {
                         ),
                 ),
               ),
-              const SliverToBoxAdapter(child: SizedBox(height: 32)),
-              // Assessments section
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Assessments',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _AssessmentCard(
-                              title: 'Pre-Test',
-                              isFinished: provider.hasCompletedPreTest,
-                              score: preTestScore,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _AssessmentCard(
-                              title: 'Post-Test',
-                              isFinished: provider.hasCompletedPostTest,
-                              availableDate: postTestAvailable ? postTestDate : null,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      if (provider.canAccessPostTest && provider.postTestResult == null)
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () => Navigator.pushNamed(
-                              context,
-                              AppRoutes.postTest,
-                            ),
-                            icon: const Icon(Icons.quiz),
-                            label: const Text('Take Post-Test'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFD32F2F),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                            ),
-                          ),
-                        ),
-                      if (provider.hasCompletedPostTest &&
-                          AdaptiveLearningService.meetsCertificateBenchmark(
-                              provider.postTestResult!))
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () => Navigator.pushNamed(
-                              context,
-                              AppRoutes.certificate,
-                            ),
-                            icon: const Icon(Icons.workspace_premium),
-                            label: const Text('View Certificate'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFD32F2F),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: 48),
-                    ],
-                  ),
-                ),
-              ),
             ],
-              ),
-            ),
           );
         },
       ),
     );
   }
-}
 
-class _ModuleCard extends StatelessWidget {
-  final ModuleModel module;
-  final bool isCompleted;
-  final VoidCallback onTap;
-
-  const _ModuleCard({
-    required this.module,
-    required this.isCompleted,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildModuleDetailCard(
+    BuildContext context,
+    ModuleModel module,
+    bool isCompleted,
+    VoidCallback onTap,
+  ) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 280,
+        width: MediaQuery.of(context).size.width * 0.75, // 75% of screen width for horizontal scroll
+        height: DesignSystem.s(context, 200),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(DesignSystem.s(context, 16)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.08),
               blurRadius: 12,
-              offset: const Offset(0, 4),
+              offset: Offset(0, DesignSystem.s(context, 4)),
             ),
           ],
         ),
         child: Stack(
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(DesignSystem.s(context, 16)),
               child: Container(
                 height: double.infinity,
                 decoration: BoxDecoration(
@@ -325,7 +325,7 @@ class _ModuleCard extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(DesignSystem.spacingMedium(context)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -333,15 +333,16 @@ class _ModuleCard extends StatelessWidget {
                   Text(
                     'Module ${module.order}',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
+                      fontSize: DesignSystem.captionSize(context),
+                      color: DesignSystem.textSecondary,
                     ),
                   ),
                   Text(
                     module.title,
-                    style: const TextStyle(
-                      fontSize: 18,
+                    style: TextStyle(
+                      fontSize: DesignSystem.s(context, 18),
                       fontWeight: FontWeight.bold,
+                      color: DesignSystem.textPrimary,
                     ),
                   ),
                   Align(
@@ -349,8 +350,8 @@ class _ModuleCard extends StatelessWidget {
                     child: Text(
                       'Read More',
                       style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.blue.shade700,
+                        fontSize: DesignSystem.bodyTextSize(context),
+                        color: DesignSystem.primary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -381,46 +382,57 @@ class _AssessmentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(DesignSystem.spacingMedium(context)),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
+        color: DesignSystem.cardSurface,
+        borderRadius: BorderRadius.circular(DesignSystem.s(context, 16)),
+        border: Border.all(color: DesignSystem.inputBorder),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 12),
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: isFinished ? Colors.green.shade100 : Colors.purple.shade100,
-            child: Icon(
-              isFinished ? Icons.check : Icons.schedule,
-              color: isFinished ? Colors.green.shade700 : Colors.purple.shade700,
-              size: 32,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            isFinished
-                ? 'Finished | ${score ?? 0}%'
-                : availableDate != null
-                    ? 'Available at ${availableDate!.toString().substring(0, 10)}'
-                    : 'Not available',
             style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade700,
+              fontSize: DesignSystem.buttonTextSize(context),
+              fontWeight: FontWeight.bold,
+              color: DesignSystem.textPrimary,
             ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(
+                radius: DesignSystem.s(context, 20),
+                backgroundColor: isFinished ? Colors.green.shade100 : Colors.purple.shade100,
+                child: Icon(
+                  isFinished ? Icons.check : Icons.schedule,
+                  color: isFinished ? Colors.green.shade700 : Colors.purple.shade700,
+                  size: DesignSystem.s(context, 24),
+                ),
+              ),
+              SizedBox(width: DesignSystem.spacingSmall(context)),
+              Text(
+                isFinished
+                    ? 'Finished | ${score ?? 0}%'
+                    : availableDate != null
+                        ? 'Available at ${_formatDate(availableDate!)}'
+                        : 'Not available',
+                style: TextStyle(
+                  fontSize: DesignSystem.bodyTextSize(context),
+                  color: DesignSystem.textSecondary,
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
+  }
+
+  String _formatDate(DateTime date) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 }

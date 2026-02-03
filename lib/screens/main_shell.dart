@@ -25,7 +25,7 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
-      appBar: _buildAppBar(),
+      appBar: _selectedDrawerItem == 'HOME' ? null : _buildAppBar(),
       endDrawer: _buildDrawer(context),
       body: _buildBody(),
     );

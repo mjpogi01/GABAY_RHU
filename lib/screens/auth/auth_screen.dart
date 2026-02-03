@@ -3,11 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_routes.dart';
+import '../../core/constants.dart';
 import '../../core/design_system.dart';
 import '../../core/supabase_config.dart';
 import '../../providers/app_provider.dart';
 import '../../models/user_model.dart';
 import '../../services/phone_auth_service.dart';
+import '../../utils/password_validator.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 
 /// Auth screen with Sign In / Sign Up toggle
 /// Design: GABAY branding, red primary, tagline
@@ -20,26 +23,31 @@ class AuthScreen extends StatefulWidget {
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> {
+class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateMixin {
   late bool _isSignUp;
   final _formKey = GlobalKey<FormState>();
+  late AnimationController _formAnimationController;
+  late Animation<double> _formFadeAnimation;
 
   // Sign In fields
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
+  bool _obscureLoginPassword = true;
 
   // Sign Up fields
   final _fullNameController = TextEditingController();
   final _signUpPhoneController = TextEditingController();
   final _signUpPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  bool _obscureSignUpPassword = true;
+  bool _obscureConfirmPassword = true;
 
   // Legacy (kept for _signUp user creation)
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _addressController = TextEditingController();
 
-  // Phone OTP flow (for sign in)
+  // Phone OTP flow (for sign up only)
   final _otpController = TextEditingController();
   // Sign-up: after Create Account we show Complete Your Profile, then OTP screen
   bool _showProfileStep = false;
@@ -63,9 +71,6 @@ class _AuthScreenState extends State<AuthScreen> {
 
   int get _resendCountdown => _resendOtpCountdown ?? 0;
 
-  bool _obscureLoginPassword = true;
-  bool _obscureSignUpPassword = true;
-  bool _obscureConfirmPassword = true;
 
   @override
   void initState() {
@@ -73,10 +78,28 @@ class _AuthScreenState extends State<AuthScreen> {
     _isSignUp = widget.initialIsSignUp;
     _otpDigitControllers = List.generate(6, (_) => TextEditingController());
     _otpFocusNodes = List.generate(6, (_) => FocusNode());
+    
+    // Animation for form content to fade in after Hero transition
+    _formAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    );
+    _formFadeAnimation = CurvedAnimation(
+      parent: _formAnimationController,
+      curve: Curves.easeOut,
+    );
+    
+    // Start form animation after a delay to let Hero transition complete
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) {
+        _formAnimationController.forward();
+      }
+    });
   }
-
+  
   @override
   void dispose() {
+    _formAnimationController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
     _fullNameController.dispose();
@@ -136,7 +159,7 @@ class _AuthScreenState extends State<AuthScreen> {
     });
     try {
       if (SupabaseConfig.isConfigured) {
-        await PhoneAuthService.sendOtp(_signUpPhoneController.text.trim());
+        await PhoneAuthService.sendSignUpOtp(_signUpPhoneController.text.trim());
       }
       if (!mounted) return;
       _startResendOtpCountdown();
@@ -193,14 +216,18 @@ class _AuthScreenState extends State<AuthScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Center(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: DesignSystem.maxContentWidth,
-                    ),
-                    child: Form(
-                      key: _formKey,
-                      child: _isSignUp ? _buildSignUpLayout(context) : _buildSignInLayout(context),
+                // Form content that fades in smoothly after Hero transition
+                FadeTransition(
+                  opacity: _formFadeAnimation,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: DesignSystem.maxContentWidth,
+                      ),
+                      child: Form(
+                        key: _formKey,
+                        child: _isSignUp ? _buildSignUpLayout(context) : _buildSignInLayout(context),
+                      ),
                     ),
                   ),
                 ),
@@ -907,21 +934,6 @@ class _AuthScreenState extends State<AuthScreen> {
           validator: (v) => (v == null || v.isEmpty) ? 'Enter password' : null,
           enabled: !_isLoading,
         ),
-        SizedBox(height: DesignSystem.spacingSmall(context)),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(
-            onPressed: () {},
-            child: Text(
-              'Forgot Password?',
-              style: TextStyle(
-                color: DesignSystem.primary,
-                fontSize: DesignSystem.helperLinkSize(context),
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ),
-        ),
         if (_authError != null) ...[
           SizedBox(height: DesignSystem.spacingSmall(context)),
           Text(
@@ -929,7 +941,7 @@ class _AuthScreenState extends State<AuthScreen> {
             style: TextStyle(color: Colors.red, fontSize: DesignSystem.bodyTextSize(context)),
           ),
         ],
-        SizedBox(height: DesignSystem.spacingSmall(context)),
+        SizedBox(height: DesignSystem.spacingLarge(context)),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
@@ -987,6 +999,7 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+
   Widget _buildSignUpForm(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1016,7 +1029,7 @@ class _AuthScreenState extends State<AuthScreen> {
           hint: 'Create a password',
           obscureText: _obscureSignUpPassword,
           onToggleObscure: () => setState(() => _obscureSignUpPassword = !_obscureSignUpPassword),
-          validator: (v) => (v == null || v.isEmpty) ? 'Enter password' : null,
+          validator: PasswordValidator.validatePassword,
         ),
         SizedBox(height: DesignSystem.spacingMedium(context)),
         _buildLabeledField(
@@ -1026,11 +1039,10 @@ class _AuthScreenState extends State<AuthScreen> {
           hint: 'Confirm your password',
           obscureText: _obscureConfirmPassword,
           onToggleObscure: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
-          validator: (v) {
-            if (v == null || v.isEmpty) return 'Confirm password';
-            if (v != _signUpPasswordController.text) return 'Passwords do not match';
-            return null;
-          },
+          validator: (v) => PasswordValidator.validatePasswordMatch(
+            _signUpPasswordController.text,
+            v,
+          ),
         ),
         if (_authError != null) ...[
           SizedBox(height: DesignSystem.spacingSmall(context)),
@@ -1059,7 +1071,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     width: 22,
                     child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                   )
-                : const Text('Create Account'),
+                : const Text('Continue'),
           ),
         ),
         SizedBox(height: DesignSystem.spacingMedium(context)),
@@ -1158,6 +1170,7 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  /// Sign in with phone + password
   Future<void> _signIn() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
@@ -1167,8 +1180,8 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       if (SupabaseConfig.isConfigured) {
         await PhoneAuthService.signInWithPhonePassword(
-          _phoneController.text.trim(),
-          _passwordController.text,
+          phone: _phoneController.text.trim(),
+          password: _passwordController.text,
         );
         if (!context.mounted) return;
         final provider = context.read<AppProvider>();
@@ -1176,12 +1189,13 @@ class _AuthScreenState extends State<AuthScreen> {
         if (!context.mounted) return;
         if (provider.user == null && PhoneAuthService.currentUser != null) {
           final u = PhoneAuthService.currentUser!;
+          final phone = PhoneAuthService.getPhoneFromUser(u) ?? _phoneController.text.trim();
           final minimalUser = UserModel(
             id: u.id,
             anonymizedId: 'anon_${u.id}',
             role: 'parent',
             createdAt: DateTime.now(),
-            phoneNumber: u.phone ?? _phoneController.text.trim(),
+            phoneNumber: phone,
           );
           await provider.setUser(minimalUser);
           if (!context.mounted) return;
@@ -1196,9 +1210,17 @@ class _AuthScreenState extends State<AuthScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _authError = e.toString().replaceAll('Exception:', '').trim();
-      });
+      String errorMessage = 'Login failed';
+      if (e is AuthException) {
+        if (e.message.contains('Invalid login credentials') || e.message.contains('Email not confirmed')) {
+          errorMessage = 'Invalid phone number or password';
+        } else {
+          errorMessage = e.message;
+        }
+      } else {
+        errorMessage = e.toString().replaceAll('Exception:', '').trim();
+      }
+      setState(() => _authError = errorMessage);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -1207,9 +1229,43 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _signUp() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
-      _showProfileStep = true;
+      _isLoading = true;
       _authError = null;
     });
+    try {
+      if (SupabaseConfig.isConfigured) {
+        // Send OTP for sign-up
+        await PhoneAuthService.sendSignUpOtp(_signUpPhoneController.text.trim());
+        if (!mounted) return;
+        setState(() {
+          _showProfileStep = true;
+          _clearOtpDigits();
+        });
+        _startResendOtpCountdown();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('OTP sent to your phone')),
+          );
+        }
+      } else {
+        await _demoLogin(context);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      String errorMessage = 'Failed to send OTP';
+      if (e is AuthException) {
+        if (e.message.contains('already registered')) {
+          errorMessage = 'This phone number is already registered';
+        } else {
+          errorMessage = e.message;
+        }
+      } else {
+        errorMessage = e.toString().replaceAll('Exception:', '').trim();
+      }
+      setState(() => _authError = errorMessage);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _saveProfileAndSendOtp() async {
@@ -1220,7 +1276,8 @@ class _AuthScreenState extends State<AuthScreen> {
     });
     try {
       if (SupabaseConfig.isConfigured) {
-        await PhoneAuthService.sendOtp(_signUpPhoneController.text.trim());
+        // Resend OTP if needed
+        await PhoneAuthService.sendSignUpOtp(_signUpPhoneController.text.trim());
       }
       if (!mounted) return;
       setState(() {
@@ -1259,37 +1316,86 @@ class _AuthScreenState extends State<AuthScreen> {
     });
     try {
       if (SupabaseConfig.isConfigured) {
-        await PhoneAuthService.verifyOtp(
-          _signUpPhoneController.text.trim(),
-          otp,
+        final phoneInput = _signUpPhoneController.text.trim();
+        final passwordInput = _signUpPasswordController.text;
+        
+        debugPrint('🔍 [AuthScreen] _verifySignUpOtp called');
+        debugPrint('   📱 Phone input: "$phoneInput"');
+        debugPrint('   📱 Phone input length: ${phoneInput.length}');
+        debugPrint('   📱 Phone input is empty: ${phoneInput.isEmpty}');
+        debugPrint('   🔑 Password length: ${passwordInput.length}');
+        debugPrint('   🔢 OTP: "$otp"');
+        debugPrint('   🔢 OTP length: ${otp.length}');
+        
+        // Verify OTP and create account with password
+        final authResponse = await PhoneAuthService.signUpWithPhonePassword(
+          phone: phoneInput,
+          password: passwordInput,
+          otp: otp,
         );
+        
+        debugPrint('✅ Account created. User ID: ${authResponse.user?.id}');
+        debugPrint('Session established: ${authResponse.session != null}');
+        
+        if (authResponse.user == null) {
+          throw Exception('Account creation failed');
+        }
+        
+        if (!context.mounted) return;
+        await _performSignUp(verifiedUserId: authResponse.user!.id);
+      } else {
+        await _demoLogin(context);
       }
-      if (!mounted) return;
-      await _performSignUp();
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _authError = e.toString().replaceAll('Exception:', '').trim();
-      });
+      String errorMessage = 'Sign-up failed';
+      if (e is AuthException) {
+        if (e.message.contains('OTP')) {
+          errorMessage = 'Invalid OTP code';
+        } else if (e.message.contains('already registered') || e.message.contains('already exists')) {
+          errorMessage = 'This phone number is already registered';
+        } else {
+          errorMessage = e.message;
+        }
+      } else {
+        errorMessage = e.toString().replaceAll('Exception:', '').trim();
+      }
+      setState(() => _authError = errorMessage);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _performSignUp() async {
+  Future<void> _performSignUp({String? verifiedUserId}) async {
     final provider = context.read<AppProvider>();
     final ts = DateTime.now().millisecondsSinceEpoch;
     String userId;
-    if (SupabaseConfig.isConfigured && PhoneAuthService.currentUser != null) {
-      userId = PhoneAuthService.currentUser!.id;
+    // Prioritize verifiedUserId from OTP response, then current session, then fallback
+    if (SupabaseConfig.isConfigured) {
+      if (verifiedUserId != null && verifiedUserId.isNotEmpty) {
+        userId = verifiedUserId;
+      } else if (PhoneAuthService.currentUser != null) {
+        userId = PhoneAuthService.currentUser!.id;
+      } else {
+        userId = 'user_$ts';
+      }
     } else {
       userId = 'user_$ts';
     }
+    
+    debugPrint('✅ OTP verified. User ID: $userId');
+    
     final fullName = _fullNameController.text.trim();
     final parts = fullName.split(RegExp(r'\s+'));
     final firstName = parts.isNotEmpty ? parts.first : '';
     final lastName = parts.length > 1 ? parts.sublist(1).join(' ') : null;
+    
+    // Normalize phone number to E.164 format for consistent storage and lookup
+    final normalizedPhone = SupabaseConfig.isConfigured
+        ? PhoneAuthService.normalizePhone(_signUpPhoneController.text.trim())
+        : _signUpPhoneController.text.trim();
+    
+    // Create user profile
     final user = UserModel(
       id: userId,
       anonymizedId: 'anon_$ts',
@@ -1297,7 +1403,7 @@ class _AuthScreenState extends State<AuthScreen> {
       createdAt: DateTime.now(),
       firstName: firstName.isNotEmpty ? firstName : null,
       lastName: lastName?.isNotEmpty == true ? lastName : null,
-      phoneNumber: _signUpPhoneController.text.trim(),
+      phoneNumber: normalizedPhone,
       status: _profileRole,
       address: _profileCommunityController.text.trim().isEmpty
           ? null
@@ -1309,22 +1415,11 @@ class _AuthScreenState extends State<AuthScreen> {
           ? null
           : _profileIdNumberController.text.trim(),
     );
+    
+    // Save user profile
     await provider.setUser(user);
     if (!context.mounted) return;
-    // Set auth user email/password for future phone+password login, then store hash in public.users
-    if (SupabaseConfig.isConfigured) {
-      try {
-        await PhoneAuthService.setAuthEmailPasswordForCurrentUser(
-          _signUpPasswordController.text,
-        );
-        await PhoneAuthService.setUserPasswordByPhoneInDatabase(
-          _signUpPhoneController.text.trim(),
-          _signUpPasswordController.text,
-        );
-      } catch (_) {
-        // Edge Function or RPC may be missing; login may still work if already set
-      }
-    }
+    
     if (!context.mounted) return;
     Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
   }

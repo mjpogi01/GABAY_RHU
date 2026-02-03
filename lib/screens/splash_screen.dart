@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/app_routes.dart';
 import '../core/constants.dart';
+import '../core/design_system.dart';
 import '../providers/app_provider.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -28,53 +29,126 @@ class _SplashScreenState extends State<SplashScreen> {
     String route;
     if (provider.user == null) {
       route = AppRoutes.landing;
-    } else if (provider.preTestResult == null) {
-      route = AppRoutes.preTest;
     } else {
       route = AppRoutes.dashboard;
     }
+    
+    // Navigate directly - Hero widgets will handle the transition
     Navigator.pushReplacementNamed(context, route);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF1F4FD8),
-              Color(0xFF193EB0),
+      backgroundColor: DesignSystem.background,
+      body: SafeArea(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Spacer(flex: 2),
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: DesignSystem.maxContentWidth,
+                ),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: DesignSystem.s(context, 24),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // These Hero widgets will smoothly transition to auth screen
+                      _buildLogo(context),
+                      SizedBox(height: DesignSystem.s(context, 16)),
+                      _buildAppName(context),
+                      SizedBox(height: DesignSystem.s(context, 8)),
+                      _buildTagline(context),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const Spacer(flex: 2),
+            Center(
+              child: CircularProgressIndicator(color: DesignSystem.primary),
+            ),
+            SizedBox(height: DesignSystem.s(context, 48)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogo(BuildContext context) {
+    final scale = DesignSystem.scale(context);
+    return Hero(
+      tag: 'app_logo',
+      transitionOnUserGestures: true,
+      child: Material(
+        color: Colors.transparent,
+        child: SizedBox(
+          height: 80 * scale,
+          width: 80 * scale, // Fixed width for smoother transition
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Text(
+                'G',
+                style: TextStyle(
+                  fontSize: 64 * scale,
+                  fontWeight: FontWeight.bold,
+                  color: DesignSystem.primary,
+                ),
+              ),
+              Positioned(
+                top: 0,
+                right: 4,
+                child: Icon(
+                  Icons.light_mode,
+                  color: DesignSystem.accentYellow,
+                  size: 32 * scale,
+                ),
+              ),
             ],
           ),
         ),
-        child: SafeArea(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Spacer(flex: 2),
-              Text(
-                AppConstants.appName,
-                style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
+      ),
+    );
+  }
+
+  Widget _buildAppName(BuildContext context) {
+    return Hero(
+      tag: 'app_name',
+      transitionOnUserGestures: true,
+      child: Material(
+        color: Colors.transparent,
+        child: Text(
+          AppConstants.appName,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                color: DesignSystem.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: DesignSystem.appTitleSize(context) * 1.5,
               ),
-              const SizedBox(height: 8),
-              Text(
-                AppConstants.appTagline,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Colors.white70,
-                    ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTagline(BuildContext context) {
+    return Hero(
+      tag: 'app_tagline',
+      transitionOnUserGestures: true,
+      child: Material(
+        color: Colors.transparent,
+        child: Text(
+          AppConstants.appTagline,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: DesignSystem.textSecondary,
+                fontSize: DesignSystem.bodyTextSize(context),
               ),
-              const Spacer(flex: 2),
-              const CircularProgressIndicator(color: Colors.white),
-              const SizedBox(height: 48),
-            ],
-          ),
         ),
       ),
     );
