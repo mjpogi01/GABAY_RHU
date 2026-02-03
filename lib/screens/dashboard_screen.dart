@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/module_model.dart';
 import '../core/app_routes.dart';
+import '../core/design_system.dart';
 import '../providers/app_provider.dart';
 import '../services/adaptive_learning_service.dart';
 
@@ -27,8 +28,11 @@ class DashboardScreen extends StatelessWidget {
                   .add(const Duration(days: 60))
               : null;
 
-          return CustomScrollView(
-            slivers: [
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: DesignSystem.maxContentWidth),
+              child: CustomScrollView(
+                slivers: [
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
@@ -265,6 +269,8 @@ class DashboardScreen extends StatelessWidget {
                 ),
               ),
             ],
+              ),
+            ),
           );
         },
       ),

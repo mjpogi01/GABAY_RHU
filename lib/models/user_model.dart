@@ -13,8 +13,10 @@ class UserModel {
   final String? lastName;
   final String? phoneNumber;
   final String? address;
-  final String? status; // New Mother, Expecting Mother, Caregiver/Guardian
+  final String? status; // Profession/Role: New Mother, Expecting Mother, Parent, etc.
+  /// Only child-related data we collect: how many children the user has.
   final int? numberOfChildren;
+  final String? idNumber; // Optional ID number (Complete Your Profile)
   final bool? hasInfant;
 
   const UserModel({
@@ -31,6 +33,7 @@ class UserModel {
     this.address,
     this.status,
     this.numberOfChildren,
+    this.idNumber,
     this.hasInfant,
   });
 
@@ -60,6 +63,7 @@ class UserModel {
         'address': address,
         'status': status,
         'numberOfChildren': numberOfChildren,
+        'idNumber': idNumber,
         'hasInfant': hasInfant,
       };
 
@@ -77,6 +81,7 @@ class UserModel {
         address: json['address'] as String?,
         status: json['status'] as String?,
         numberOfChildren: json['numberOfChildren'] as int?,
+        idNumber: json['idNumber'] as String?,
         hasInfant: json['hasInfant'] as bool?,
       );
 
@@ -87,6 +92,7 @@ class UserModel {
     String? address,
     String? status,
     int? numberOfChildren,
+    String? idNumber,
     bool? hasInfant,
   }) =>
       UserModel(
@@ -103,6 +109,7 @@ class UserModel {
         address: address ?? this.address,
         status: status ?? this.status,
         numberOfChildren: numberOfChildren ?? this.numberOfChildren,
+        idNumber: idNumber ?? this.idNumber,
         hasInfant: hasInfant ?? this.hasInfant,
       );
 }

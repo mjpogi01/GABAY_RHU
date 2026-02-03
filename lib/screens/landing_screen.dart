@@ -16,9 +16,12 @@ class LandingScreen extends StatelessWidget {
         child: Column(
           children: [
             const Spacer(),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: DesignSystem.s(context, 32)),
-              child: Card(
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: DesignSystem.maxContentWidth),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: DesignSystem.s(context, 32)),
+                  child: Card(
                 elevation: 2,
                 color: DesignSystem.cardSurface,
                 shape: RoundedRectangleBorder(
@@ -72,7 +75,7 @@ class LandingScreen extends StatelessWidget {
                           onPressed: () => _navigateToAuth(context, isSignUp: true),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: DesignSystem.secondary,
-                            foregroundColor: Colors.white,
+                            foregroundColor: DesignSystem.textPrimary,
                             minimumSize: const Size.fromHeight(DesignSystem.buttonHeight),
                             padding: DesignSystem.buttonPadding,
                             shape: RoundedRectangleBorder(
@@ -84,6 +87,8 @@ class LandingScreen extends StatelessWidget {
                       ),
                     ],
                   ),
+                ),
+              ),
                 ),
               ),
             ),

@@ -1,29 +1,25 @@
 import '../models/user_model.dart';
-import '../models/child_model.dart';
 import '../models/module_model.dart';
 import '../models/question_model.dart';
 import '../models/assessment_result_model.dart';
 import '../models/progress_model.dart';
 
-/// Abstract data source - SQLite on mobile, in-memory on web
+/// Abstract data source - users table only for auth; no children or preferences.
 abstract class AppDataSource {
   Future<UserModel?> getCurrentUser();
-  Future<ChildModel?> getCurrentChild();
   Future<void> setCurrentUser(String userId);
-  Future<void> setCurrentChild(String childId);
   Future<void> saveUser(UserModel user);
-  Future<void> saveChild(ChildModel child);
   Future<void> logout();
 
-  Future<AssessmentResultModel?> getPreTestResult(String userId, String childId);
-  Future<AssessmentResultModel?> getPostTestResult(String userId, String childId);
+  Future<AssessmentResultModel?> getPreTestResult(String userId);
+  Future<AssessmentResultModel?> getPostTestResult(String userId);
   Future<void> saveAssessmentResult(AssessmentResultModel result);
 
   Future<List<ModuleModel>> getAllModules();
   Future<ModuleModel?> getModuleById(String id);
-  Future<List<String>> getAssignedModuleIds(String userId, String childId);
-  Future<void> assignModules(String userId, String childId, List<String> moduleIds);
-  Future<List<ModuleProgressModel>> getModuleProgress(String userId, String childId);
+  Future<List<String>> getAssignedModuleIds(String userId);
+  Future<void> assignModules(String userId, List<String> moduleIds);
+  Future<List<ModuleProgressModel>> getModuleProgress(String userId);
   Future<void> saveModuleProgress(ModuleProgressModel progress);
 
   Future<List<QuestionModel>> getPreTestQuestions();

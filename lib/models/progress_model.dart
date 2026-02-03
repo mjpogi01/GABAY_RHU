@@ -1,8 +1,7 @@
-/// User progress - module completion, time spent, certificate
+/// User progress - module completion (user only, no child)
 class ModuleProgressModel {
   final String id;
   final String userId;
-  final String childId;
   final String moduleId;
   final bool completed;
   final int timeSpentSeconds;
@@ -11,7 +10,6 @@ class ModuleProgressModel {
   const ModuleProgressModel({
     required this.id,
     required this.userId,
-    required this.childId,
     required this.moduleId,
     required this.completed,
     this.timeSpentSeconds = 0,
@@ -21,7 +19,6 @@ class ModuleProgressModel {
   Map<String, dynamic> toJson() => {
         'id': id,
         'userId': userId,
-        'childId': childId,
         'moduleId': moduleId,
         'completed': completed ? 1 : 0,
         'timeSpentSeconds': timeSpentSeconds,
@@ -30,14 +27,15 @@ class ModuleProgressModel {
 
   factory ModuleProgressModel.fromJson(Map<String, dynamic> json) =>
       ModuleProgressModel(
-        id: json['id'] as String,
-        userId: json['userId'] as String,
-        childId: json['childId'] as String,
-        moduleId: json['moduleId'] as String,
-        completed: (json['completed'] as int?) == 1,
-        timeSpentSeconds: json['timeSpentSeconds'] as int? ?? 0,
+        id: json['id']?.toString() ?? '',
+        userId: json['userId']?.toString() ?? '',
+        moduleId: json['moduleId']?.toString() ?? '',
+        completed: (json['completed'] == 1 || json['completed'] == true),
+        timeSpentSeconds: json['timeSpentSeconds'] is int
+            ? json['timeSpentSeconds'] as int
+            : int.tryParse(json['timeSpentSeconds']?.toString() ?? '') ?? 0,
         completedAt: json['completedAt'] != null
-            ? DateTime.parse(json['completedAt'] as String)
+            ? DateTime.tryParse(json['completedAt'].toString())
             : null,
       );
 }

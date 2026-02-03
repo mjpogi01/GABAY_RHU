@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/app_routes.dart';
+import '../core/design_system.dart';
 import '../providers/app_provider.dart';
 import '../models/assessment_result_model.dart';
 import '../models/question_model.dart';
@@ -56,10 +57,9 @@ class _PreTestScreenState extends State<PreTestScreen> {
 
     final totalCorrect = responses.where((r) => r.isCorrect).length;
     _result = AssessmentResultModel(
-      id: 'pre_${provider.user!.id}_${provider.child!.id}',
+      id: 'pre_${provider.user!.id}',
       userId: provider.user!.id,
-      childId: provider.child!.id,
-      type: 'pre',
+      type: 'pre_test',
       domainScores: domainScores,
       domainTotals: domainTotals,
       totalCorrect: totalCorrect,
@@ -99,58 +99,65 @@ class _PreTestScreenState extends State<PreTestScreen> {
         title: Text('Pre-Test (${_currentIndex + 1}/${_questions.length})'),
         automaticallyImplyLeading: false,
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              q.text,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 24),
-            ...List.generate(q.options.length, (i) {
-              final selected = _answers[q.id] == i;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Card(
-                  color: selected
-                      ? Theme.of(context).colorScheme.primaryContainer
-                      : null,
-                  child: ListTile(
-                    title: Text(q.options[i], style: const TextStyle(fontSize: 18)),
-                    onTap: () => setState(() => _answers[q.id] = i),
-                  ),
-                ),
-              );
-            }),
-            const Spacer(),
-            Row(
+        child: Center(
+          child: SizedBox(
+            width: DesignSystem.maxContentWidth,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (_currentIndex > 0)
-                  TextButton(
-                    onPressed: () =>
-                        setState(() => _currentIndex--),
-                    child: const Text('Back'),
-                  ),
-                const Spacer(),
-                ElevatedButton(
-                  onPressed: () {
-                    if (_currentIndex < _questions.length - 1) {
-                      setState(() => _currentIndex++);
-                    } else {
-                      _submit();
-                    }
-                  },
-                  child: Text(
-                    _currentIndex < _questions.length - 1
-                        ? 'Next'
-                        : 'Submit',
-                  ),
+                Text(
+                  q.text,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 24),
+                ...List.generate(q.options.length, (i) {
+                  final selected = _answers[q.id] == i;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Card(
+                      color: selected
+                          ? Theme.of(context).colorScheme.primaryContainer
+                          : null,
+                      child: ListTile(
+                        title: Text(q.options[i], style: const TextStyle(fontSize: 18)),
+                        onTap: () => setState(() => _answers[q.id] = i),
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    if (_currentIndex > 0)
+                      TextButton(
+                        onPressed: () => setState(() => _currentIndex--),
+                        child: const Text('Back'),
+                      )
+                    else
+                      const SizedBox.shrink(),
+                    ElevatedButton(
+                      onPressed: () {
+                        if (_currentIndex < _questions.length - 1) {
+                          setState(() => _currentIndex++);
+                        } else {
+                          _submit();
+                        }
+                      },
+                      child: Text(
+                        _currentIndex < _questions.length - 1
+                            ? 'Next'
+                            : 'Submit',
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -164,55 +171,62 @@ class _PreTestScreenState extends State<PreTestScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Your score: ${_result!.totalCorrect}/${_result!.totalQuestions} '
-              '(${(_result!.overallScore * 100).round()}%)',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Feedback: Correct answers are shown below.',
-              style: TextStyle(fontSize: 16),
-            ),
-            const SizedBox(height: 16),
-            ..._questions.map((q) {
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(q.text, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Correct answer: ${q.options[q.correctIndex]}',
-                        style: TextStyle(
-                          color: Colors.green.shade700,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      if (q.explanation != null) ...[
-                        const SizedBox(height: 8),
-                        Text(q.explanation!),
-                      ],
-                    ],
-                  ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: DesignSystem.maxContentWidth),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Your score: ${_result!.totalCorrect}/${_result!.totalQuestions} '
+                      '(${(_result!.overallScore * 100).round()}%)',
+                  style: Theme.of(context).textTheme.headlineMedium,
                 ),
-              );
-            }),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () => Navigator.pushReplacementNamed(
-                context,
-                AppRoutes.dashboard,
-              ),
-              child: const Text('Continue to Learning'),
+                const SizedBox(height: 24),
+                const Text(
+                  'Feedback: Correct answers are shown below.',
+                  style: TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 16),
+                ..._questions.map((q) {
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(q.text, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Correct answer: ${q.options[q.correctIndex]}',
+                            style: TextStyle(
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          if (q.explanation != null) ...[
+                            const SizedBox(height: 8),
+                            Text(q.explanation!),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => Navigator.pushReplacementNamed(
+                    context,
+                    AppRoutes.dashboard,
+                  ),
+                  child: const Text('Continue to Learning'),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

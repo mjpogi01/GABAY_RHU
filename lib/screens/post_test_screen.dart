@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/app_routes.dart';
+import '../core/design_system.dart';
 import '../providers/app_provider.dart';
 import '../services/adaptive_learning_service.dart';
 import '../models/assessment_result_model.dart';
@@ -63,10 +64,9 @@ class _PostTestScreenState extends State<PostTestScreen> {
 
     final totalCorrect = responses.where((r) => r.isCorrect).length;
     _result = AssessmentResultModel(
-      id: 'post_${provider.user!.id}_${provider.child!.id}',
+      id: 'post_${provider.user!.id}',
       userId: provider.user!.id,
-      childId: provider.child!.id,
-      type: 'post',
+      type: 'post_test',
       domainScores: domainScores,
       domainTotals: domainTotals,
       totalCorrect: totalCorrect,
@@ -176,10 +176,13 @@ class _PostTestScreenState extends State<PostTestScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: DesignSystem.maxContentWidth),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
               'Your score: ${_result!.totalCorrect}/${_result!.totalQuestions} '
               '(${(_result!.overallScore * 100).round()}%)',
               style: Theme.of(context).textTheme.headlineMedium,
@@ -230,7 +233,9 @@ class _PostTestScreenState extends State<PostTestScreen> {
                 child: const Text('View Certificate'),
               ),
             ],
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );

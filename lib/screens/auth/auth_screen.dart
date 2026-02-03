@@ -1,12 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_routes.dart';
 import '../../core/design_system.dart';
 import '../../core/supabase_config.dart';
 import '../../providers/app_provider.dart';
 import '../../models/user_model.dart';
-import '../../models/child_model.dart';
 import '../../services/phone_auth_service.dart';
 
 /// Auth screen with Sign In / Sign Up toggle
@@ -39,16 +39,40 @@ class _AuthScreenState extends State<AuthScreen> {
   final _lastNameController = TextEditingController();
   final _addressController = TextEditingController();
 
-  // Phone OTP flow (for sign up when Supabase configured - legacy)
-  bool _otpSent = false;
+  // Phone OTP flow (for sign in)
   final _otpController = TextEditingController();
+  // Sign-up: after Create Account we show Complete Your Profile, then OTP screen
+  bool _showProfileStep = false;
+  bool _signUpOtpSent = false;
   bool _isLoading = false;
   String? _authError;
+
+  // Complete Your Profile (before OTP)
+  final _profileCommunityController = TextEditingController();
+  final _profileIdNumberController = TextEditingController();
+  String? _profileRole; // Profession/Role dropdown
+  int? _profileNumberOfChildren; // Number of children dropdown
+
+  // OTP one-box-per-digit (6 boxes) – initialized in initState for web/hot-reload safety
+  List<TextEditingController>? _otpDigitControllers;
+  List<FocusNode>? _otpFocusNodes;
+
+  // Resend OTP countdown (seconds remaining; 0 = can resend). Nullable for web/hot-reload.
+  int? _resendOtpCountdown = 0;
+  Timer? _resendOtpTimer;
+
+  int get _resendCountdown => _resendOtpCountdown ?? 0;
+
+  bool _obscureLoginPassword = true;
+  bool _obscureSignUpPassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void initState() {
     super.initState();
     _isSignUp = widget.initialIsSignUp;
+    _otpDigitControllers = List.generate(6, (_) => TextEditingController());
+    _otpFocusNodes = List.generate(6, (_) => FocusNode());
   }
 
   @override
@@ -63,7 +87,90 @@ class _AuthScreenState extends State<AuthScreen> {
     _lastNameController.dispose();
     _addressController.dispose();
     _otpController.dispose();
+    _profileCommunityController.dispose();
+    _profileIdNumberController.dispose();
+    final controllers = _otpDigitControllers;
+    if (controllers != null) {
+      for (var i = 0; i < controllers.length; i++) {
+        controllers[i].dispose();
+      }
+    }
+    final nodes = _otpFocusNodes;
+    if (nodes != null) {
+      for (var i = 0; i < nodes.length; i++) {
+        nodes[i].dispose();
+      }
+    }
+    _resendOtpTimer?.cancel();
     super.dispose();
+  }
+
+  void _startResendOtpCountdown() {
+    _resendOtpTimer?.cancel();
+    _resendOtpCountdown = 60;
+    _resendOtpTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) {
+        _resendOtpTimer?.cancel();
+        return;
+      }
+      final current = _resendOtpCountdown ?? 0;
+      if (current <= 0) {
+        _resendOtpTimer?.cancel();
+        return;
+      }
+      setState(() {
+        _resendOtpCountdown = current - 1;
+        if (_resendOtpCountdown! <= 0) {
+          _resendOtpTimer?.cancel();
+          _resendOtpCountdown = 0;
+        }
+      });
+    });
+  }
+
+  Future<void> _resendSignUpOtp() async {
+    if (_resendCountdown > 0) return;
+    setState(() {
+      _isLoading = true;
+      _authError = null;
+    });
+    try {
+      if (SupabaseConfig.isConfigured) {
+        await PhoneAuthService.sendOtp(_signUpPhoneController.text.trim());
+      }
+      if (!mounted) return;
+      _startResendOtpCountdown();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('OTP sent again')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _authError = e.toString().replaceAll('Exception:', '').trim();
+      });
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  String _getOtpFromDigits() {
+    final list = _otpDigitControllers;
+    if (list == null || list.isEmpty) return '';
+    final sb = StringBuffer();
+    for (var i = 0; i < list.length; i++) {
+      sb.write(list[i].text);
+    }
+    return sb.toString();
+  }
+
+  void _clearOtpDigits() {
+    final list = _otpDigitControllers;
+    if (list == null) return;
+    for (var i = 0; i < list.length; i++) {
+      list[i].clear();
+    }
   }
 
   @override
@@ -86,9 +193,16 @@ class _AuthScreenState extends State<AuthScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Form(
-                  key: _formKey,
-                  child: _isSignUp ? _buildSignUpLayout(context) : _buildSignInLayout(context),
+                Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: DesignSystem.maxContentWidth,
+                    ),
+                    child: Form(
+                      key: _formKey,
+                      child: _isSignUp ? _buildSignUpLayout(context) : _buildSignInLayout(context),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -144,7 +258,11 @@ class _AuthScreenState extends State<AuthScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Create Account',
+              _signUpOtpSent
+                  ? 'Verify your phone'
+                  : _showProfileStep
+                      ? 'Complete Your Profile'
+                      : 'Create Account',
               style: TextStyle(
                 fontSize: DesignSystem.sectionTitleSize(context),
                 fontWeight: FontWeight.w600,
@@ -152,74 +270,560 @@ class _AuthScreenState extends State<AuthScreen> {
               ),
             ),
             SizedBox(height: DesignSystem.s(context, 4)),
-            Text(
-              'Register to start your learning journey',
-              style: TextStyle(
-                fontSize: DesignSystem.bodyTextSize(context),
-                fontWeight: FontWeight.w400,
-                color: DesignSystem.textPrimary,
+            if (_signUpOtpSent) ...[
+              Text(
+                'Enter the 6-digit code sent to',
+                style: TextStyle(
+                  fontSize: DesignSystem.bodyTextSize(context),
+                  fontWeight: FontWeight.w400,
+                  color: DesignSystem.textPrimary,
+                ),
               ),
-            ),
+              SizedBox(height: DesignSystem.s(context, 2)),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    _signUpPhoneController.text.trim(),
+                    style: TextStyle(
+                      fontSize: DesignSystem.bodyTextSize(context),
+                      fontWeight: FontWeight.w600,
+                      color: DesignSystem.textPrimary,
+                    ),
+                  ),
+                  SizedBox(width: DesignSystem.s(context, 8)),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: _isLoading
+                        ? null
+                        : () => setState(() {
+                              _signUpOtpSent = false;
+                              _clearOtpDigits();
+                              _otpController.clear();
+                              _authError = null;
+                              _resendOtpTimer?.cancel();
+                              _resendOtpCountdown = 0;
+                            }),
+                    child: Text(
+                      'Change number',
+                      style: TextStyle(
+                        color: DesignSystem.primary,
+                        fontSize: DesignSystem.helperLinkSize(context),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ] else if (_showProfileStep)
+              Text(
+                'Help us personalize your learning experience',
+                style: TextStyle(
+                  fontSize: DesignSystem.bodyTextSize(context),
+                  fontWeight: FontWeight.w400,
+                  color: DesignSystem.textSecondary,
+                ),
+              )
+            else
+              Text(
+                'Register to start your learning journey',
+                style: TextStyle(
+                  fontSize: DesignSystem.bodyTextSize(context),
+                  fontWeight: FontWeight.w400,
+                  color: DesignSystem.textSecondary,
+                ),
+              ),
             SizedBox(height: DesignSystem.spacingLarge(context)),
-            _buildSignUpForm(context),
+            _signUpOtpSent
+                ? _buildSignUpOtpForm(context)
+                : _showProfileStep
+                    ? _buildProfileForm(context)
+                    : _buildSignUpForm(context),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildToggleButtons(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: DesignSystem.inputBorder),
-        borderRadius: BorderRadius.circular(DesignSystem.buttonBorderRadius),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => _isSignUp = false),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: _isSignUp ? DesignSystem.cardSurface : DesignSystem.primary,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  'Sign In',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: DesignSystem.buttonTextSize(context),
-                    fontWeight: FontWeight.w600,
-                    color: _isSignUp ? DesignSystem.textPrimary : Colors.white,
-                  ),
-                ),
-              ),
-            ),
+  static const List<String> _profileRoleOptions = [
+    'New Mother',
+    'Expecting Mother',
+    'Parent',
+    'Grandparent',
+    'Caregiver',
+    'Daycare Provider',
+    'Healthcare Worker',
+    'Student',
+    'Other',
+  ];
+
+  /// Only child-related user data we collect: number of children.
+  /// (label, value). Use -1 for Not Applicable (saved as null).
+  static const int _notApplicableChildren = -1;
+  static const List<(String, int)> _profileNumberOfChildrenOptions = [
+    ('Expecting First Child', 0),
+    ('1 Child', 1),
+    ('2 Children', 2),
+    ('3 Children', 3),
+    ('4 Children', 4),
+    ('5 or More Children', 5),
+    ('Not Applicable', _notApplicableChildren),
+  ];
+
+  Widget _buildProfileForm(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Profession / Role *
+        Text(
+          'Profession / Role *',
+          style: TextStyle(
+            fontSize: DesignSystem.bodyTextSize(context),
+            fontWeight: FontWeight.w400,
+            color: DesignSystem.textPrimary,
           ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => _isSignUp = true),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: _isSignUp ? DesignSystem.primary : DesignSystem.cardSurface,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  'Sign Up',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: DesignSystem.buttonTextSize(context),
-                    fontWeight: FontWeight.w600,
-                    color: _isSignUp ? Colors.white : DesignSystem.textPrimary,
-                  ),
-                ),
-              ),
+        ),
+        SizedBox(height: DesignSystem.s(context, 6)),
+        DropdownButtonFormField<String>(
+          value: _profileRole,
+          decoration: InputDecoration(
+            hintText: 'Select your role',
+            hintStyle: TextStyle(color: DesignSystem.textMuted, fontSize: DesignSystem.inputTextSize(context)),
+            filled: true,
+            fillColor: DesignSystem.inputBackground,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(DesignSystem.inputBorderRadius),
             ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(DesignSystem.inputBorderRadius),
+              borderSide: const BorderSide(color: DesignSystem.inputBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(DesignSystem.inputBorderRadius),
+              borderSide: const BorderSide(color: DesignSystem.primary),
+            ),
+            contentPadding: DesignSystem.inputPadding,
+          ),
+          items: _profileRoleOptions
+              .map((e) => DropdownMenuItem<String>(value: e, child: Text(e)))
+              .toList(),
+          onChanged: (v) => setState(() => _profileRole = v),
+          validator: (v) => (v == null || v.isEmpty) ? 'Select your role' : null,
+        ),
+        SizedBox(height: DesignSystem.spacingMedium(context)),
+        // Community / Location *
+        _buildLabeledField(
+          context,
+          label: 'Community / Location *',
+          controller: _profileCommunityController,
+          hint: 'Enter your community or location',
+          keyboardType: TextInputType.streetAddress,
+          validator: (v) => (v == null || v.isEmpty) ? 'Enter your community or location' : null,
+        ),
+        SizedBox(height: DesignSystem.spacingMedium(context)),
+        // Number of Children * (only child detail we collect)
+        Text(
+          'Number of Children *',
+          style: TextStyle(
+            fontSize: DesignSystem.bodyTextSize(context),
+            fontWeight: FontWeight.w400,
+            color: DesignSystem.textPrimary,
+          ),
+        ),
+        SizedBox(height: DesignSystem.s(context, 6)),
+        DropdownButtonFormField<int>(
+          value: _profileNumberOfChildren,
+          decoration: InputDecoration(
+            hintText: 'Select number of children',
+            hintStyle: TextStyle(color: DesignSystem.textMuted, fontSize: DesignSystem.inputTextSize(context)),
+            filled: true,
+            fillColor: DesignSystem.inputBackground,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(DesignSystem.inputBorderRadius),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(DesignSystem.inputBorderRadius),
+              borderSide: const BorderSide(color: DesignSystem.inputBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(DesignSystem.inputBorderRadius),
+              borderSide: const BorderSide(color: DesignSystem.primary),
+            ),
+            contentPadding: DesignSystem.inputPadding,
+          ),
+          items: _profileNumberOfChildrenOptions
+              .map((e) => DropdownMenuItem<int>(
+                    value: e.$2,
+                    child: Text(e.$1),
+                  ))
+              .toList(),
+          onChanged: (v) => setState(() => _profileNumberOfChildren = v),
+          validator: (v) => v == null ? 'Select number of children' : null,
+        ),
+        SizedBox(height: DesignSystem.spacingMedium(context)),
+        // ID Number (Optional)
+        _buildLabeledField(
+          context,
+          label: 'ID Number (Optional)',
+          controller: _profileIdNumberController,
+          hint: 'Enter your ID number',
+          keyboardType: TextInputType.text,
+          validator: (_) => null,
+        ),
+        if (_authError != null) ...[
+          SizedBox(height: DesignSystem.spacingSmall(context)),
+          Text(
+            _authError!,
+            style: TextStyle(color: Colors.red, fontSize: DesignSystem.bodyTextSize(context)),
           ),
         ],
-      ),
+        SizedBox(height: DesignSystem.spacingLarge(context)),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _isLoading ? null : _saveProfileAndSendOtp,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: DesignSystem.primary,
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(DesignSystem.buttonHeight),
+              padding: DesignSystem.buttonPadding,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(DesignSystem.buttonBorderRadius),
+              ),
+            ),
+            child: _isLoading
+                ? const SizedBox(
+                    height: 22,
+                    width: 22,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                  )
+                : const Text('Save Profile and Continue'),
+          ),
+        ),
+        SizedBox(height: DesignSystem.spacingMedium(context)),
+        TextButton(
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          onPressed: _isLoading
+              ? null
+              : () => setState(() {
+                    _showProfileStep = false;
+                    _authError = null;
+                  }),
+          child: Text(
+            'Back',
+            style: TextStyle(
+              color: DesignSystem.primary,
+              fontSize: DesignSystem.helperLinkSize(context),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSignUpOtpForm(BuildContext context) {
+    final controllers = _otpDigitControllers;
+    final nodes = _otpFocusNodes;
+    if (controllers == null ||
+        nodes == null ||
+        controllers.length != 6 ||
+        nodes.length != 6) {
+      return _buildSignUpOtpFormFallback(context);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: List.generate(6, (index) {
+            return SizedBox(
+              width: 44,
+              child: Focus(
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.backspace &&
+                      controllers[index].text.isEmpty &&
+                      index > 0) {
+                    FocusScope.of(context).requestFocus(nodes[index - 1]);
+                    controllers[index - 1].clear();
+                    setState(() {});
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: TextFormField(
+                  controller: controllers[index],
+                  focusNode: nodes[index],
+                  decoration: InputDecoration(
+                    counterText: '',
+                    filled: true,
+                    fillColor: DesignSystem.inputBackground,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(DesignSystem.inputBorderRadius),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(DesignSystem.inputBorderRadius),
+                      borderSide: const BorderSide(color: DesignSystem.inputBorder),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(DesignSystem.inputBorderRadius),
+                      borderSide: const BorderSide(color: DesignSystem.primary, width: 1.5),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  textAlign: TextAlign.center,
+                  keyboardType: TextInputType.number,
+                  maxLength: 1,
+                  style: TextStyle(
+                    color: DesignSystem.textPrimary,
+                    fontSize: DesignSystem.inputTextSize(context),
+                    fontWeight: FontWeight.w600,
+                  ),
+                  enabled: !_isLoading,
+                  onChanged: (value) {
+                    setState(() {});
+                    if (value.isNotEmpty && index < 5) {
+                      FocusScope.of(context).requestFocus(nodes[index + 1]);
+                    }
+                  },
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                  ],
+                ),
+              ),
+            );
+          }),
+        ),
+        SizedBox(height: DesignSystem.s(context, 4)),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            onPressed: (_resendCountdown > 0 || _isLoading)
+                ? null
+                : _resendSignUpOtp,
+            child: Text(
+              _resendCountdown > 0
+                  ? 'Resend OTP ($_resendCountdown)'
+                  : 'Resend OTP',
+              style: TextStyle(
+                color: _resendCountdown > 0
+                    ? DesignSystem.textMuted
+                    : DesignSystem.primary,
+                fontSize: DesignSystem.helperLinkSize(context),
+              ),
+            ),
+          ),
+        ),
+        if (_authError != null) ...[
+          Text(
+            _authError!,
+            style: TextStyle(
+              color: Colors.red,
+              fontSize: DesignSystem.bodyTextSize(context),
+            ),
+          ),
+          SizedBox(height: DesignSystem.spacingSmall(context)),
+        ],
+        SizedBox(height: DesignSystem.spacingMedium(context)),
+        Row(
+          children: [
+            TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                minimumSize: Size(0, DesignSystem.buttonHeight),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: _isLoading
+                  ? null
+                  : () => setState(() {
+                        _signUpOtpSent = false;
+                        _showProfileStep = true;
+                        _clearOtpDigits();
+                        _otpController.clear();
+                        _authError = null;
+                        _resendOtpTimer?.cancel();
+                        _resendOtpCountdown = 0;
+                      }),
+              child: Text(
+                'Back',
+                style: TextStyle(
+                  color: DesignSystem.primary,
+                  fontSize: DesignSystem.buttonTextSize(context),
+                ),
+              ),
+            ),
+            SizedBox(width: DesignSystem.s(context, 12)),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _verifySignUpOtp,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: DesignSystem.primary,
+                  foregroundColor: Colors.white,
+                  minimumSize: Size(100, DesignSystem.buttonHeight),
+                  padding: DesignSystem.buttonPadding,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(DesignSystem.buttonBorderRadius),
+                  ),
+                ),
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: const Text('Verify'),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Fallback when OTP digit controllers are not ready (e.g. after hot reload on web).
+  Widget _buildSignUpOtpFormFallback(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextFormField(
+          controller: _otpController,
+          decoration: InputDecoration(
+            hintText: '000000',
+            filled: true,
+            fillColor: DesignSystem.inputBackground,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(DesignSystem.inputBorderRadius),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(DesignSystem.inputBorderRadius),
+              borderSide: const BorderSide(color: DesignSystem.inputBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(DesignSystem.inputBorderRadius),
+              borderSide: const BorderSide(color: DesignSystem.primary),
+            ),
+            contentPadding: DesignSystem.inputPadding,
+          ),
+          keyboardType: TextInputType.number,
+          maxLength: 6,
+          style: TextStyle(
+            color: DesignSystem.textPrimary,
+            fontSize: DesignSystem.inputTextSize(context),
+          ),
+          enabled: !_isLoading,
+        ),
+        SizedBox(height: DesignSystem.s(context, 4)),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            onPressed: (_resendCountdown > 0 || _isLoading)
+                ? null
+                : _resendSignUpOtp,
+            child: Text(
+              _resendCountdown > 0
+                  ? 'Resend OTP ($_resendCountdown)'
+                  : 'Resend OTP',
+              style: TextStyle(
+                color: _resendCountdown > 0
+                    ? DesignSystem.textMuted
+                    : DesignSystem.primary,
+                fontSize: DesignSystem.helperLinkSize(context),
+              ),
+            ),
+          ),
+        ),
+        if (_authError != null) ...[
+          Text(
+            _authError!,
+            style: TextStyle(
+              color: Colors.red,
+              fontSize: DesignSystem.bodyTextSize(context),
+            ),
+          ),
+          SizedBox(height: DesignSystem.spacingSmall(context)),
+        ],
+        SizedBox(height: DesignSystem.spacingMedium(context)),
+        Row(
+          children: [
+            TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                minimumSize: Size(0, DesignSystem.buttonHeight),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: _isLoading
+                  ? null
+                  : () => setState(() {
+                        _signUpOtpSent = false;
+                        _showProfileStep = true;
+                        _clearOtpDigits();
+                        _otpController.clear();
+                        _authError = null;
+                        _resendOtpTimer?.cancel();
+                        _resendOtpCountdown = 0;
+                      }),
+              child: Text(
+                'Back',
+                style: TextStyle(
+                  color: DesignSystem.primary,
+                  fontSize: DesignSystem.buttonTextSize(context),
+                ),
+              ),
+            ),
+            SizedBox(width: DesignSystem.s(context, 12)),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _verifySignUpOtp,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: DesignSystem.primary,
+                  foregroundColor: Colors.white,
+                  minimumSize: Size(100, DesignSystem.buttonHeight),
+                  padding: DesignSystem.buttonPadding,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(DesignSystem.buttonBorderRadius),
+                  ),
+                ),
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: const Text('Verify'),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -290,8 +894,15 @@ class _AuthScreenState extends State<AuthScreen> {
               borderSide: const BorderSide(color: DesignSystem.primary),
             ),
             contentPadding: DesignSystem.inputPadding,
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscureLoginPassword ? Icons.visibility_off : Icons.visibility,
+                color: DesignSystem.textMuted,
+              ),
+              onPressed: () => setState(() => _obscureLoginPassword = !_obscureLoginPassword),
+            ),
           ),
-          obscureText: true,
+          obscureText: _obscureLoginPassword,
           style: TextStyle(color: DesignSystem.textPrimary, fontSize: DesignSystem.inputTextSize(context)),
           validator: (v) => (v == null || v.isEmpty) ? 'Enter password' : null,
           enabled: !_isLoading,
@@ -346,13 +957,18 @@ class _AuthScreenState extends State<AuthScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              "Don't have account? ",
+              "Don't have account?",
               style: TextStyle(
                 color: DesignSystem.textPrimary,
                 fontSize: DesignSystem.bodyTextSize(context),
               ),
             ),
             TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
               onPressed: () => setState(() {
                 _isSignUp = true;
                 _authError = null;
@@ -369,99 +985,6 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
       ],
     );
-  }
-
-  Widget _buildOtpForm(BuildContext context, String phone, Future<void> Function() onVerify) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Enter the 6-digit code sent to $phone',
-          style: TextStyle(color: DesignSystem.textSecondary, fontSize: DesignSystem.bodyTextSize(context)),
-        ),
-        SizedBox(height: DesignSystem.spacingMedium(context)),
-        TextFormField(
-          controller: _otpController,
-          decoration: InputDecoration(
-            hintText: '000000',
-            filled: true,
-            fillColor: DesignSystem.inputBackground,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(DesignSystem.inputBorderRadius)),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(DesignSystem.inputBorderRadius),
-              borderSide: const BorderSide(color: DesignSystem.inputBorder),
-            ),
-          ),
-          keyboardType: TextInputType.number,
-          maxLength: 6,
-          validator: (v) => (v == null || v.length != 6) ? 'Enter 6-digit code' : null,
-          enabled: !_isLoading,
-        ),
-        if (_authError != null) ...[
-          SizedBox(height: DesignSystem.spacingSmall(context)),
-          Text(_authError!, style: TextStyle(color: Colors.red, fontSize: DesignSystem.bodyTextSize(context))),
-        ],
-        SizedBox(height: DesignSystem.spacingMedium(context)),
-        Row(
-          children: [
-            TextButton(
-              onPressed: _isLoading ? null : () => setState(() {
-                _otpSent = false;
-                _otpController.clear();
-                _authError = null;
-              }),
-              child: Text('Change number', style: TextStyle(color: DesignSystem.primary, fontSize: DesignSystem.helperLinkSize(context))),
-            ),
-            const Spacer(),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : () => onVerify(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: DesignSystem.primary,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(DesignSystem.buttonHeight),
-                  padding: DesignSystem.buttonPadding,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(DesignSystem.buttonBorderRadius)),
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                        height: 22,
-                        width: 22,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                      )
-                    : const Text('Verify'),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Future<void> _signInWithOtp() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() {
-      _isLoading = true;
-      _authError = null;
-    });
-    try {
-      await PhoneAuthService.verifyOtp(_phoneController.text, _otpController.text);
-      if (!context.mounted) return;
-      final provider = context.read<AppProvider>();
-      await provider.init(); // Refresh from Supabase
-      if (!context.mounted) return;
-      if (provider.preTestResult == null) {
-        Navigator.pushReplacementNamed(context, AppRoutes.preTest);
-      } else {
-        Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
-      }
-    } catch (e) {
-      if (!context.mounted) return;
-      setState(() {
-        _isLoading = false;
-        _authError = e.toString().replaceAll('Exception:', '').trim();
-      });
-    }
   }
 
   Widget _buildSignUpForm(BuildContext context) {
@@ -491,7 +1014,8 @@ class _AuthScreenState extends State<AuthScreen> {
           label: 'Password',
           controller: _signUpPasswordController,
           hint: 'Create a password',
-          obscureText: true,
+          obscureText: _obscureSignUpPassword,
+          onToggleObscure: () => setState(() => _obscureSignUpPassword = !_obscureSignUpPassword),
           validator: (v) => (v == null || v.isEmpty) ? 'Enter password' : null,
         ),
         SizedBox(height: DesignSystem.spacingMedium(context)),
@@ -500,7 +1024,8 @@ class _AuthScreenState extends State<AuthScreen> {
           label: 'Confirm Password',
           controller: _confirmPasswordController,
           hint: 'Confirm your password',
-          obscureText: true,
+          obscureText: _obscureConfirmPassword,
+          onToggleObscure: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
           validator: (v) {
             if (v == null || v.isEmpty) return 'Confirm password';
             if (v != _signUpPasswordController.text) return 'Passwords do not match';
@@ -528,7 +1053,13 @@ class _AuthScreenState extends State<AuthScreen> {
                 borderRadius: BorderRadius.circular(DesignSystem.buttonBorderRadius),
               ),
             ),
-            child: const Text('Create Account'),
+            child: _isLoading
+                ? const SizedBox(
+                    height: 22,
+                    width: 22,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                  )
+                : const Text('Create Account'),
           ),
         ),
         SizedBox(height: DesignSystem.spacingMedium(context)),
@@ -536,13 +1067,18 @@ class _AuthScreenState extends State<AuthScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              'Already have an account? ',
+              'Already have an account?',
               style: TextStyle(
                 color: DesignSystem.textPrimary,
                 fontSize: DesignSystem.bodyTextSize(context),
               ),
             ),
             TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
               onPressed: () => setState(() {
                 _isSignUp = false;
                 _authError = null;
@@ -568,6 +1104,7 @@ class _AuthScreenState extends State<AuthScreen> {
     required String hint,
     required String? Function(String?) validator,
     bool obscureText = false,
+    VoidCallback? onToggleObscure,
     TextInputType keyboardType = TextInputType.text,
   }) {
     return Column(
@@ -601,6 +1138,15 @@ class _AuthScreenState extends State<AuthScreen> {
               borderSide: const BorderSide(color: DesignSystem.primary),
             ),
             contentPadding: DesignSystem.inputPadding,
+            suffixIcon: onToggleObscure != null
+                ? IconButton(
+                    icon: Icon(
+                      obscureText ? Icons.visibility_off : Icons.visibility,
+                      color: DesignSystem.textMuted,
+                    ),
+                    onPressed: onToggleObscure,
+                  )
+                : null,
           ),
           obscureText: obscureText,
           keyboardType: keyboardType,
@@ -612,25 +1158,6 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Widget _nextButton(String label, VoidCallback onPressed) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: DesignSystem.primary,
-          foregroundColor: Colors.white,
-          minimumSize: const Size.fromHeight(DesignSystem.buttonHeight),
-          padding: DesignSystem.buttonPadding,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(DesignSystem.buttonBorderRadius),
-          ),
-        ),
-        child: Text(label),
-      ),
-    );
-  }
-
   Future<void> _signIn() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
@@ -639,18 +1166,30 @@ class _AuthScreenState extends State<AuthScreen> {
     });
     try {
       if (SupabaseConfig.isConfigured) {
-        await PhoneAuthService.signInWithPassword(
-          _phoneController.text,
+        await PhoneAuthService.signInWithPhonePassword(
+          _phoneController.text.trim(),
           _passwordController.text,
         );
         if (!context.mounted) return;
         final provider = context.read<AppProvider>();
         await provider.init();
         if (!context.mounted) return;
-        if (provider.preTestResult == null) {
-          Navigator.pushReplacementNamed(context, AppRoutes.preTest);
-        } else {
+        if (provider.user == null && PhoneAuthService.currentUser != null) {
+          final u = PhoneAuthService.currentUser!;
+          final minimalUser = UserModel(
+            id: u.id,
+            anonymizedId: 'anon_${u.id}',
+            role: 'parent',
+            createdAt: DateTime.now(),
+            phoneNumber: u.phone ?? _phoneController.text.trim(),
+          );
+          await provider.setUser(minimalUser);
+          if (!context.mounted) return;
+        }
+        if (provider.user != null) {
           Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+        } else {
+          setState(() => _authError = 'Could not load session. Please try again.');
         }
       } else {
         await _demoLogin(context);
@@ -658,14 +1197,87 @@ class _AuthScreenState extends State<AuthScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _isLoading = false;
         _authError = e.toString().replaceAll('Exception:', '').trim();
       });
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _signUp() async {
     if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _showProfileStep = true;
+      _authError = null;
+    });
+  }
+
+  Future<void> _saveProfileAndSendOtp() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _isLoading = true;
+      _authError = null;
+    });
+    try {
+      if (SupabaseConfig.isConfigured) {
+        await PhoneAuthService.sendOtp(_signUpPhoneController.text.trim());
+      }
+      if (!mounted) return;
+      setState(() {
+        _showProfileStep = false;
+        _signUpOtpSent = true;
+        _clearOtpDigits();
+      });
+      _startResendOtpCountdown();
+      if (SupabaseConfig.isConfigured && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('OTP sent to your phone')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _authError = e.toString().replaceAll('Exception:', '').trim();
+      });
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _verifySignUpOtp() async {
+    final controllers = _otpDigitControllers;
+    final otp = (controllers != null && controllers.length == 6)
+        ? _getOtpFromDigits()
+        : _otpController.text.trim();
+    if (otp.length != 6) {
+      setState(() => _authError = 'Enter 6-digit code');
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _authError = null;
+    });
+    try {
+      if (SupabaseConfig.isConfigured) {
+        await PhoneAuthService.verifyOtp(
+          _signUpPhoneController.text.trim(),
+          otp,
+        );
+      }
+      if (!mounted) return;
+      await _performSignUp();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _authError = e.toString().replaceAll('Exception:', '').trim();
+      });
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _performSignUp() async {
     final provider = context.read<AppProvider>();
     final ts = DateTime.now().millisecondsSinceEpoch;
     String userId;
@@ -686,38 +1298,35 @@ class _AuthScreenState extends State<AuthScreen> {
       firstName: firstName.isNotEmpty ? firstName : null,
       lastName: lastName?.isNotEmpty == true ? lastName : null,
       phoneNumber: _signUpPhoneController.text.trim(),
+      status: _profileRole,
+      address: _profileCommunityController.text.trim().isEmpty
+          ? null
+          : _profileCommunityController.text.trim(),
+      numberOfChildren: _profileNumberOfChildren == _notApplicableChildren
+          ? null
+          : _profileNumberOfChildren,
+      idNumber: _profileIdNumberController.text.trim().isEmpty
+          ? null
+          : _profileIdNumberController.text.trim(),
     );
-    final child = ChildModel(
-      id: 'child_$ts',
-      caregiverId: user.id,
-      dateOfBirth: DateTime.now().subtract(const Duration(days: 365)),
-    );
-    await provider.setUserAndChild(user, child);
+    await provider.setUser(user);
     if (!context.mounted) return;
-    Navigator.pushReplacementNamed(context, AppRoutes.preTest);
-  }
-
-  Future<void> _testDatabaseConnection(BuildContext context) async {
-    try {
-      final supabase = Supabase.instance.client;
-      // Try to query the users table to test connection
-      final response = await supabase.from('users').select('count').limit(1);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Database connection successful!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Database connection failed: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    // Set auth user email/password for future phone+password login, then store hash in public.users
+    if (SupabaseConfig.isConfigured) {
+      try {
+        await PhoneAuthService.setAuthEmailPasswordForCurrentUser(
+          _signUpPasswordController.text,
+        );
+        await PhoneAuthService.setUserPasswordByPhoneInDatabase(
+          _signUpPhoneController.text.trim(),
+          _signUpPasswordController.text,
+        );
+      } catch (_) {
+        // Edge Function or RPC may be missing; login may still work if already set
+      }
     }
+    if (!context.mounted) return;
+    Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
   }
 
   Future<void> _demoLogin(BuildContext context) async {
@@ -734,31 +1343,8 @@ class _AuthScreenState extends State<AuthScreen> {
       numberOfChildren: 1,
       address: 'Sto Niño, Batangas City',
     );
-    final child = ChildModel(
-      id: 'child_$ts',
-      caregiverId: user.id,
-      dateOfBirth: DateTime.now().subtract(const Duration(days: 180)),
-    );
-    await provider.setUserAndChild(user, child);
+    await provider.setUser(user);
     if (!context.mounted) return;
-    Navigator.pushReplacementNamed(context, AppRoutes.preTest);
-  }
-
-  bool _isSupabaseConnected() {
-    try {
-      // Check if Supabase is initialized
-      final supabase = Supabase.instance.client;
-      print('Supabase client initialized: ${supabase != null}');
-
-      // Check if we have a current user
-      final user = supabase.auth.currentUser;
-      print('Current user: ${user?.email ?? 'null'}');
-
-      // For now, just check if Supabase client exists and we can access auth
-      return supabase != null;
-    } catch (e) {
-      print('Supabase connection error: $e');
-      return false;
-    }
+    Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
   }
 }

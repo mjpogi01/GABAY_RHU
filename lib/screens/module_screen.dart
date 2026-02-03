@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/app_routes.dart';
+import '../core/design_system.dart';
 import '../providers/app_provider.dart';
 import '../models/module_model.dart';
 
@@ -89,9 +90,12 @@ class _ModuleScreenState extends State<ModuleScreen> {
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: DesignSystem.maxContentWidth),
+            child: Column(
+              children: [
+                Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -151,7 +155,9 @@ class _ModuleScreenState extends State<ModuleScreen> {
                 ],
               ),
             ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );

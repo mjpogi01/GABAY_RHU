@@ -12,7 +12,6 @@ class AssessmentRepository {
       {
         'id': result.id,
         'userId': result.userId,
-        'childId': result.childId,
         'type': result.type,
         'domainScoresJson': jsonEncode(result.domainScores),
         'domainTotalsJson': jsonEncode(result.domainTotals),
@@ -26,29 +25,23 @@ class AssessmentRepository {
     );
   }
 
-  static Future<AssessmentResultModel?> getPreTestResult(
-    String userId,
-    String childId,
-  ) async {
+  static Future<AssessmentResultModel?> getPreTestResult(String userId) async {
     final db = await DatabaseService.database;
     final rows = await db.query(
       'assessment_results',
-      where: 'userId = ? AND childId = ? AND type = ?',
-      whereArgs: [userId, childId, 'pre'],
+      where: 'userId = ? AND type = ?',
+      whereArgs: [userId, 'pre_test'],
     );
     if (rows.isEmpty) return null;
     return _rowToResult(rows.first);
   }
 
-  static Future<AssessmentResultModel?> getPostTestResult(
-    String userId,
-    String childId,
-  ) async {
+  static Future<AssessmentResultModel?> getPostTestResult(String userId) async {
     final db = await DatabaseService.database;
     final rows = await db.query(
       'assessment_results',
-      where: 'userId = ? AND childId = ? AND type = ?',
-      whereArgs: [userId, childId, 'post'],
+      where: 'userId = ? AND type = ?',
+      whereArgs: [userId, 'post_test'],
     );
     if (rows.isEmpty) return null;
     return _rowToResult(rows.first);
@@ -58,7 +51,6 @@ class AssessmentRepository {
     return AssessmentResultModel(
       id: r['id'] as String,
       userId: r['userId'] as String,
-      childId: r['childId'] as String,
       type: r['type'] as String,
       domainScores: Map<String, int>.from(
         jsonDecode(r['domainScoresJson'] as String) as Map,

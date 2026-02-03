@@ -2,12 +2,11 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:flutter/foundation.dart';
 
-/// Offline-first SQLite database
-/// No data loss during interruptions
+/// Offline-first SQLite (users only; no children or preferences).
 class DatabaseService {
   static Database? _db;
   static const String _dbName = 'gabay.db';
-  static const int _version = 1;
+  static const int _version = 4;
 
   static Future<Database> get database async {
     if (_db != null) return _db!;
@@ -17,21 +16,82 @@ class DatabaseService {
 
   static Future<Database> _init() async {
     if (kIsWeb) {
-      // For web, use in-memory database since file system is not available
       return openDatabase(
         inMemoryDatabasePath,
         version: _version,
         onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
       );
     } else {
-      // For mobile/desktop, use file-based database
       final databasesPath = await getDatabasesPath();
       final path = join(databasesPath, _dbName);
       return openDatabase(
         path,
         version: _version,
         onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
       );
+    }
+  }
+
+  static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE users ADD COLUMN firstName TEXT');
+      await db.execute('ALTER TABLE users ADD COLUMN lastName TEXT');
+      await db.execute('ALTER TABLE users ADD COLUMN phoneNumber TEXT');
+      await db.execute('ALTER TABLE users ADD COLUMN address TEXT');
+      await db.execute('ALTER TABLE users ADD COLUMN status TEXT');
+      await db.execute('ALTER TABLE users ADD COLUMN numberOfChildren INTEGER');
+      await db.execute('ALTER TABLE users ADD COLUMN idNumber TEXT');
+      await db.execute('ALTER TABLE users ADD COLUMN hasInfant INTEGER');
+    }
+    if (oldVersion < 3) {
+      await db.execute('CREATE TABLE children_new (id TEXT PRIMARY KEY, caregiverId TEXT NOT NULL, dateOfBirth TEXT, anonymizedChildId TEXT, FOREIGN KEY (caregiverId) REFERENCES users(id))');
+      await db.execute('INSERT INTO children_new SELECT id, caregiverId, dateOfBirth, anonymizedChildId FROM children');
+      await db.execute('DROP TABLE children');
+      await db.execute('ALTER TABLE children_new RENAME TO children');
+    }
+    if (oldVersion < 4) {
+      await db.execute('DROP TABLE IF EXISTS assigned_modules');
+      await db.execute('DROP TABLE IF EXISTS module_progress');
+      await db.execute('DROP TABLE IF EXISTS assessment_results');
+      await db.execute('DROP TABLE IF EXISTS children');
+      await db.execute('''
+        CREATE TABLE assessment_results (
+          id TEXT PRIMARY KEY,
+          userId TEXT NOT NULL,
+          type TEXT NOT NULL,
+          domainScoresJson TEXT NOT NULL,
+          domainTotalsJson TEXT NOT NULL,
+          totalCorrect INTEGER NOT NULL,
+          totalQuestions INTEGER NOT NULL,
+          completedAt TEXT NOT NULL,
+          responsesJson TEXT NOT NULL,
+          FOREIGN KEY (userId) REFERENCES users(id)
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE module_progress (
+          id TEXT PRIMARY KEY,
+          userId TEXT NOT NULL,
+          moduleId TEXT NOT NULL,
+          completed INTEGER DEFAULT 0,
+          timeSpentSeconds INTEGER DEFAULT 0,
+          completedAt TEXT,
+          FOREIGN KEY (userId) REFERENCES users(id),
+          FOREIGN KEY (moduleId) REFERENCES modules(id)
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE assigned_modules (
+          id TEXT PRIMARY KEY,
+          userId TEXT NOT NULL,
+          moduleId TEXT NOT NULL,
+          assignedAt TEXT NOT NULL,
+          FOREIGN KEY (userId) REFERENCES users(id),
+          FOREIGN KEY (moduleId) REFERENCES modules(id)
+        )
+      ''');
     }
   }
 
@@ -44,16 +104,15 @@ class DatabaseService {
         rhuCode TEXT,
         barangayCode TEXT,
         createdAt TEXT NOT NULL,
-        consentGiven INTEGER DEFAULT 1
-      )
-    ''');
-    await db.execute('''
-      CREATE TABLE children (
-        id TEXT PRIMARY KEY,
-        caregiverId TEXT NOT NULL,
-        dateOfBirth TEXT NOT NULL,
-        anonymizedChildId TEXT,
-        FOREIGN KEY (caregiverId) REFERENCES users(id)
+        consentGiven INTEGER DEFAULT 1,
+        firstName TEXT,
+        lastName TEXT,
+        phoneNumber TEXT,
+        address TEXT,
+        status TEXT,
+        numberOfChildren INTEGER,
+        idNumber TEXT,
+        hasInfant INTEGER
       )
     ''');
     await db.execute('''
@@ -81,7 +140,6 @@ class DatabaseService {
       CREATE TABLE assessment_results (
         id TEXT PRIMARY KEY,
         userId TEXT NOT NULL,
-        childId TEXT NOT NULL,
         type TEXT NOT NULL,
         domainScoresJson TEXT NOT NULL,
         domainTotalsJson TEXT NOT NULL,
@@ -89,21 +147,18 @@ class DatabaseService {
         totalQuestions INTEGER NOT NULL,
         completedAt TEXT NOT NULL,
         responsesJson TEXT NOT NULL,
-        FOREIGN KEY (userId) REFERENCES users(id),
-        FOREIGN KEY (childId) REFERENCES children(id)
+        FOREIGN KEY (userId) REFERENCES users(id)
       )
     ''');
     await db.execute('''
       CREATE TABLE module_progress (
         id TEXT PRIMARY KEY,
         userId TEXT NOT NULL,
-        childId TEXT NOT NULL,
         moduleId TEXT NOT NULL,
         completed INTEGER DEFAULT 0,
         timeSpentSeconds INTEGER DEFAULT 0,
         completedAt TEXT,
         FOREIGN KEY (userId) REFERENCES users(id),
-        FOREIGN KEY (childId) REFERENCES children(id),
         FOREIGN KEY (moduleId) REFERENCES modules(id)
       )
     ''');
@@ -111,11 +166,9 @@ class DatabaseService {
       CREATE TABLE assigned_modules (
         id TEXT PRIMARY KEY,
         userId TEXT NOT NULL,
-        childId TEXT NOT NULL,
         moduleId TEXT NOT NULL,
         assignedAt TEXT NOT NULL,
         FOREIGN KEY (userId) REFERENCES users(id),
-        FOREIGN KEY (childId) REFERENCES children(id),
         FOREIGN KEY (moduleId) REFERENCES modules(id)
       )
     ''');

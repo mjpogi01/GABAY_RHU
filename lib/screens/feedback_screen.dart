@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/app_routes.dart';
+import '../core/design_system.dart';
 
 /// Post-test usability and experience survey
 /// Prevents duplicate or incomplete submissions
@@ -31,7 +32,10 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
-        child: Form(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: DesignSystem.maxContentWidth),
+            child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -90,6 +94,8 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                 ),
               ),
             ],
+          ),
+            ),
           ),
         ),
       ),

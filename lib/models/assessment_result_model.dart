@@ -1,11 +1,10 @@
-/// Pre-test or post-test result
+/// Pre-test or post-test result (user only, no child)
 class AssessmentResultModel {
   final String id;
   final String userId;
-  final String childId;
-  final String type; // 'pre' or 'post'
-  final Map<String, int> domainScores; // domain -> correct count
-  final Map<String, int> domainTotals; // domain -> total questions
+  final String type; // 'pre_test' or 'post_test'
+  final Map<String, int> domainScores;
+  final Map<String, int> domainTotals;
   final int totalCorrect;
   final int totalQuestions;
   final DateTime completedAt;
@@ -14,7 +13,6 @@ class AssessmentResultModel {
   const AssessmentResultModel({
     required this.id,
     required this.userId,
-    required this.childId,
     required this.type,
     required this.domainScores,
     required this.domainTotals,
@@ -35,7 +33,6 @@ class AssessmentResultModel {
   Map<String, dynamic> toJson() => {
         'id': id,
         'userId': userId,
-        'childId': childId,
         'type': type,
         'domainScores': domainScores,
         'domainTotals': domainTotals,
@@ -45,21 +42,43 @@ class AssessmentResultModel {
         'responses': responses.map((r) => r.toJson()).toList(),
       };
 
-  factory AssessmentResultModel.fromJson(Map<String, dynamic> json) =>
-      AssessmentResultModel(
-        id: json['id'] as String,
-        userId: json['userId'] as String,
-        childId: json['childId'] as String,
-        type: json['type'] as String,
-        domainScores: Map<String, int>.from(json['domainScores'] as Map),
-        domainTotals: Map<String, int>.from(json['domainTotals'] as Map),
-        totalCorrect: json['totalCorrect'] as int,
-        totalQuestions: json['totalQuestions'] as int,
-        completedAt: DateTime.parse(json['completedAt'] as String),
-        responses: (json['responses'] as List<dynamic>)
-            .map((r) => QuestionResponse.fromJson(r as Map<String, dynamic>))
-            .toList(),
-      );
+  factory AssessmentResultModel.fromJson(Map<String, dynamic> json) {
+    final id = json['id']?.toString() ?? '';
+    final userId = json['userId']?.toString() ?? '';
+    final type = json['type']?.toString() ?? '';
+    final domainScores = json['domainScores'] is Map
+        ? Map<String, int>.from(json['domainScores'] as Map)
+        : <String, int>{};
+    final domainTotals = json['domainTotals'] is Map
+        ? Map<String, int>.from(json['domainTotals'] as Map)
+        : <String, int>{};
+    final totalCorrect = json['totalCorrect'] is int
+        ? json['totalCorrect'] as int
+        : int.tryParse(json['totalCorrect']?.toString() ?? '') ?? 0;
+    final totalQuestions = json['totalQuestions'] is int
+        ? json['totalQuestions'] as int
+        : int.tryParse(json['totalQuestions']?.toString() ?? '') ?? 0;
+    final completedAt = json['completedAt'] != null
+        ? DateTime.tryParse(json['completedAt'].toString()) ?? DateTime.now()
+        : DateTime.now();
+    final responsesRaw = json['responses'];
+    final responses = responsesRaw is List
+        ? (responsesRaw)
+            .map<QuestionResponse>((r) => QuestionResponse.fromJson(Map<String, dynamic>.from(r is Map ? r : <String, dynamic>{})))
+            .toList()
+        : <QuestionResponse>[];
+    return AssessmentResultModel(
+      id: id,
+      userId: userId,
+      type: type,
+      domainScores: domainScores,
+      domainTotals: domainTotals,
+      totalCorrect: totalCorrect,
+      totalQuestions: totalQuestions,
+      completedAt: completedAt,
+      responses: responses,
+    );
+  }
 }
 
 class QuestionResponse {
@@ -81,8 +100,10 @@ class QuestionResponse {
 
   factory QuestionResponse.fromJson(Map<String, dynamic> json) =>
       QuestionResponse(
-        questionId: json['questionId'] as String,
-        selectedIndex: json['selectedIndex'] as int,
-        isCorrect: (json['isCorrect'] as int?) == 1,
+        questionId: json['questionId']?.toString() ?? '',
+        selectedIndex: json['selectedIndex'] is int
+            ? json['selectedIndex'] as int
+            : int.tryParse(json['selectedIndex']?.toString() ?? '') ?? 0,
+        isCorrect: (json['isCorrect'] == 1 || json['isCorrect'] == true),
       );
 }

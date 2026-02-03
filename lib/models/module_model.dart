@@ -55,9 +55,11 @@ class ModuleCard {
       };
 
   factory ModuleCard.fromJson(Map<String, dynamic> json) => ModuleCard(
-        id: json['id'] as String,
-        content: json['content'] as String,
-        imagePath: json['imagePath'] as String?,
-        order: json['order'] as int,
+        id: json['id']?.toString() ?? '',
+        content: json['content']?.toString() ?? '',
+        imagePath: json['imagePath']?.toString(),
+        order: json['order'] is int
+            ? json['order'] as int
+            : int.tryParse(json['order']?.toString() ?? '') ?? 0,
       );
 }

@@ -1,5 +1,4 @@
 import '../models/user_model.dart';
-import '../models/child_model.dart';
 import '../models/module_model.dart';
 import '../models/question_model.dart';
 import '../models/assessment_result_model.dart';
@@ -11,36 +10,27 @@ import '../repositories/assessment_repository.dart';
 import '../repositories/progress_repository.dart';
 import 'seed_data.dart';
 
-/// SQLite-backed data source for mobile (Android, iOS)
+/// SQLite-backed data source (users only; no children or preferences).
 class SqliteAppDataSource implements AppDataSource {
   @override
   Future<UserModel?> getCurrentUser() => AuthService.getCurrentUser();
 
   @override
-  Future<ChildModel?> getCurrentChild() => AuthService.getCurrentChild();
-
-  @override
   Future<void> setCurrentUser(String userId) => AuthService.setCurrentUser(userId);
-
-  @override
-  Future<void> setCurrentChild(String childId) => AuthService.setCurrentChild(childId);
 
   @override
   Future<void> saveUser(UserModel user) => AuthService.saveUser(user);
 
   @override
-  Future<void> saveChild(ChildModel child) => AuthService.saveChild(child);
-
-  @override
   Future<void> logout() => AuthService.logout();
 
   @override
-  Future<AssessmentResultModel?> getPreTestResult(String userId, String childId) =>
-      AssessmentRepository.getPreTestResult(userId, childId);
+  Future<AssessmentResultModel?> getPreTestResult(String userId) =>
+      AssessmentRepository.getPreTestResult(userId);
 
   @override
-  Future<AssessmentResultModel?> getPostTestResult(String userId, String childId) =>
-      AssessmentRepository.getPostTestResult(userId, childId);
+  Future<AssessmentResultModel?> getPostTestResult(String userId) =>
+      AssessmentRepository.getPostTestResult(userId);
 
   @override
   Future<void> saveAssessmentResult(AssessmentResultModel result) =>
@@ -53,16 +43,16 @@ class SqliteAppDataSource implements AppDataSource {
   Future<ModuleModel?> getModuleById(String id) => ModuleRepository.getModuleById(id);
 
   @override
-  Future<List<String>> getAssignedModuleIds(String userId, String childId) =>
-      ProgressRepository.getAssignedModuleIds(userId, childId);
+  Future<List<String>> getAssignedModuleIds(String userId) =>
+      ProgressRepository.getAssignedModuleIds(userId);
 
   @override
-  Future<void> assignModules(String userId, String childId, List<String> moduleIds) =>
-      ProgressRepository.assignModules(userId, childId, moduleIds);
+  Future<void> assignModules(String userId, List<String> moduleIds) =>
+      ProgressRepository.assignModules(userId, moduleIds);
 
   @override
-  Future<List<ModuleProgressModel>> getModuleProgress(String userId, String childId) =>
-      ProgressRepository.getModuleProgress(userId, childId);
+  Future<List<ModuleProgressModel>> getModuleProgress(String userId) =>
+      ProgressRepository.getModuleProgress(userId);
 
   @override
   Future<void> saveModuleProgress(ModuleProgressModel progress) =>

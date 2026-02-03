@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:printing/printing.dart';
+import '../core/design_system.dart';
 import '../providers/app_provider.dart';
 import '../services/certificate_service.dart';
 
@@ -26,7 +27,10 @@ class CertificateScreen extends StatelessWidget {
         title: const Text('Your Certificate'),
         automaticallyImplyLeading: false,
       ),
-      body: FutureBuilder<Uint8List>(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: DesignSystem.maxContentWidth),
+          child: FutureBuilder<Uint8List>(
         future: CertificateService.generateCertificate(
           user: provider.user!,
           postTestResult: provider.postTestResult!,
@@ -42,6 +46,8 @@ class CertificateScreen extends StatelessWidget {
             allowPrinting: true,
           );
         },
+          ),
+        ),
       ),
     );
   }

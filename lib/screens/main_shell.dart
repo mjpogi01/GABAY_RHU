@@ -67,7 +67,6 @@ class _MainShellState extends State<MainShell> {
   Widget _buildDrawer(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final user = provider.user;
-    final child = provider.child;
 
     return Drawer(
       child: SafeArea(
@@ -92,10 +91,6 @@ class _MainShellState extends State<MainShell> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  if (child != null) ...[
-                    const SizedBox(height: 4),
-                    Text('Children: ${provider.completedModuleIds.isNotEmpty ? 1 : 0}'),
-                  ],
                   if (user?.status != null) ...[
                     const SizedBox(height: 4),
                     Text('Status: ${user!.status}'),

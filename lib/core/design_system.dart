@@ -23,6 +23,8 @@ class DesignSystem {
   static const double baselineWidth = 375;
   /// Cap scale so elements don't grow too large on tablets/landscape.
   static const double maxScale = 1.3;
+  /// Max width for main content on large screens; content is centered when narrower.
+  static const double maxContentWidth = 440;
 
   static double scale(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
