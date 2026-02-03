@@ -7,12 +7,12 @@ class SupabaseConfig {
 
   static const String url = String.fromEnvironment(
     'SUPABASE_URL',
-    defaultValue: '',
+    defaultValue: 'https://pttvxcsrgljcvvfdplrw.supabase.co',
   );
 
   static const String anonKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
-    defaultValue: '',
+    defaultValue: 'sb_publishable_b6outFkUxt9LQ_xIfUrXog_nTubIZag',
   );
 
   static bool get isConfigured => url.isNotEmpty && anonKey.isNotEmpty;

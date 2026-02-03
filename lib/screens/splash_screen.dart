@@ -27,7 +27,7 @@ class _SplashScreenState extends State<SplashScreen> {
     }
     String route;
     if (provider.user == null) {
-      route = AppRoutes.login;
+      route = AppRoutes.landing;
     } else if (provider.preTestResult == null) {
       route = AppRoutes.preTest;
     } else {
@@ -46,8 +46,8 @@ class _SplashScreenState extends State<SplashScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFD32F2F),
-              Color(0xFFB71C1C),
+              Color(0xFF1F4FD8),
+              Color(0xFF193EB0),
             ],
           ),
         ),

@@ -31,7 +31,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Account')),
+      appBar: AppBar(
+        title: const Text('Create Account'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              _isSupabaseConnected() ? 'Connected' : 'Disconnected',
+              style: TextStyle(
+                color: _isSupabaseConnected() ? Colors.green : Colors.red,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Form(
@@ -96,7 +111,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   if (picked != null) setState(() => _childDob = picked);
                 },
                 child: InputDecorator(
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Child\'s date of birth',
                     hintText: 'Tap to select',
                   ),
@@ -183,6 +198,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  bool _isSupabaseConnected() {
+    try {
+      // Check if Supabase is initialized and has a valid session
+      final supabase = Supabase.instance.client;
+      return supabase.auth.currentSession != null;
+    } catch (e) {
+      return false;
     }
   }
 }

@@ -16,7 +16,8 @@ void main() async {
       DeviceOrientation.portraitUp,
     ]);
   }
-  if (SupabaseConfig.isConfigured) {
+  // Always initialize Supabase for web builds since SQLite doesn't work
+  if (kIsWeb || SupabaseConfig.isConfigured) {
     await Supabase.initialize(
       url: SupabaseConfig.url,
       anonKey: SupabaseConfig.anonKey,

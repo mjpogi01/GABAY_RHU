@@ -1,6 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
 
 /// Offline-first SQLite database
 /// No data loss during interruptions
@@ -16,13 +16,23 @@ class DatabaseService {
   }
 
   static Future<Database> _init() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final path = join(dir.path, _dbName);
-    return openDatabase(
-      path,
-      version: _version,
-      onCreate: _onCreate,
-    );
+    if (kIsWeb) {
+      // For web, use in-memory database since file system is not available
+      return openDatabase(
+        inMemoryDatabasePath,
+        version: _version,
+        onCreate: _onCreate,
+      );
+    } else {
+      // For mobile/desktop, use file-based database
+      final databasesPath = await getDatabasesPath();
+      final path = join(databasesPath, _dbName);
+      return openDatabase(
+        path,
+        version: _version,
+        onCreate: _onCreate,
+      );
+    }
   }
 
   static Future<void> _onCreate(Database db, int version) async {

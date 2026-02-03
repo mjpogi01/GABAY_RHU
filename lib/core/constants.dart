@@ -8,6 +8,7 @@ class AppConstants {
   static const String appName = 'GABAY';
   static const String appTagline = 'Alalay mo sa ligtas at tamang pag-aaruga.';
   static const String appTaglineEn = 'Your guide to safe and proper care.';
+  static const String appTaglineLanding = 'Maternal Knowledge Assessment on Child Rearing.';
 
   // User status options (Sign Up)
   static const List<String> userStatusOptions = [

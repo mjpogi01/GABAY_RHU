@@ -3,7 +3,7 @@ import '../data/supabase_app_data_source.dart';
 import 'app_data_source.dart';
 import 'supabase_config.dart';
 
-AppDataSource createAppDataSource() {
+AppDataSource createAppDataSourceWeb() {
   if (SupabaseConfig.isConfigured) {
     return SupabaseAppDataSource();
   }

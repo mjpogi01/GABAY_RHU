@@ -1,6 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'app_data_source.dart';
-import 'data_source_stub.dart'
-    if (dart.library.html) 'data_source_web.dart'
-    if (dart.library.io) 'data_source_io.dart' as impl;
+import 'data_source_web.dart';
+import 'data_source_io.dart';
 
-AppDataSource createAppDataSource() => impl.createAppDataSource();
+AppDataSource createAppDataSource() {
+  if (kIsWeb) {
+    return createAppDataSourceWeb();
+  } else {
+    return createAppDataSourceIO();
+  }
+}

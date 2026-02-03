@@ -246,8 +246,7 @@ class SupabaseAppDataSource implements AppDataSource {
 
   @override
   Future<void> ensureSeeded() async {
-    // For Supabase, seeding might be done via SQL scripts or migrations
-    // For now, we'll assume the database is pre-seeded
-    await SeedData.ensureSeeded();
+    // For Supabase, seeding is done via SQL scripts or migrations
+    // Data is pre-seeded in the Supabase database
   }
 }

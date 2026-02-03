@@ -29,6 +29,12 @@ class PhoneAuthService {
     );
   }
 
+  /// Sign in with phone and password
+  static Future<AuthResponse> signInWithPassword(String phone, String password) async {
+    final normalized = normalizePhone(phone);
+    return _client.auth.signInWithPassword(phone: normalized, password: password);
+  }
+
   /// Verify OTP and sign in
   static Future<AuthResponse> verifyOtp(String phone, String token) async {
     final normalized = normalizePhone(phone);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/app_routes.dart';
 import '../providers/app_provider.dart';
 import 'dashboard_screen.dart';
@@ -31,18 +32,22 @@ class _MainShellState extends State<MainShell> {
   }
 
   PreferredSizeWidget? _buildAppBar() {
-    if (_selectedDrawerItem == 'HOME' || _selectedDrawerItem == 'MODULES' ||
-        _selectedDrawerItem == 'ASSESSMENTS' || _selectedDrawerItem == 'PROGRESS') {
-      return null; // Dashboard has no app bar (content starts at top)
-    }
     final titles = {
       'BABY_GUIDE': 'Baby Guide',
       'HELP': 'Help',
       'SETTINGS': 'Settings',
     };
+
     return AppBar(
       title: Text(titles[_selectedDrawerItem] ?? 'GABAY'),
       automaticallyImplyLeading: false,
+      leading: Container(
+        padding: const EdgeInsets.all(12),
+        child: CircleAvatar(
+          radius: 8,
+          backgroundColor: _isSupabaseConnected() ? Colors.green : Colors.red,
+        ),
+      ),
       actions: [
         GestureDetector(
           onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
@@ -99,26 +104,6 @@ class _MainShellState extends State<MainShell> {
                     const SizedBox(height: 4),
                     Text('Address: ${user!.address}'),
                   ],
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _isSupabaseConnected() ? Icons.cloud_done : Icons.cloud_off,
-                        size: 16,
-                        color: _isSupabaseConnected() ? Colors.green : Colors.red,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _isSupabaseConnected() ? '🟢 Connected' : '🔴 Not Connected',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: _isSupabaseConnected() ? Colors.green : Colors.red,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
                 ],
               ),
             ),

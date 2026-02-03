@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../screens/splash_screen.dart';
+import '../screens/landing_screen.dart';
 import '../screens/auth/auth_screen.dart';
 import '../screens/pre_test_screen.dart';
 import '../screens/module_screen.dart';
@@ -13,6 +14,7 @@ import '../screens/settings_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
+  static const String landing = '/landing';
   static const String login = '/login';
   static const String register = '/register';
   static const String dashboard = '/dashboard';
@@ -29,9 +31,14 @@ class AppRoutes {
     switch (settings.name) {
       case splash:
         return MaterialPageRoute(builder: (_) => const SplashScreen());
+      case landing:
+        return MaterialPageRoute(builder: (_) => const LandingScreen());
       case login:
       case register:
-        return MaterialPageRoute(builder: (_) => const AuthScreen());
+        final args = settings.arguments as Map<String, dynamic>?;
+        return MaterialPageRoute(
+          builder: (_) => AuthScreen(initialIsSignUp: args?['isSignUp'] as bool? ?? false),
+        );
       case dashboard:
         return MaterialPageRoute(builder: (_) => const MainShell());
       case preTest:
