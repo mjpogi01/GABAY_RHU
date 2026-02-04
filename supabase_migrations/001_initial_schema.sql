@@ -138,17 +138,4 @@ CREATE POLICY "Users can insert own assessment results" ON assessment_results FO
 
 GRANT EXECUTE ON FUNCTION normalize_phone_ph(text) TO authenticated;
 
--- ============================================================================
--- SEED DATA
--- ============================================================================
-
-INSERT INTO modules (id, title, description, content, order_index) VALUES
-('module_1', 'Introduction to Infant Care', 'Basic care for newborns', 'Content for module 1', 1),
-('module_2', 'Nutrition and Feeding', 'Proper feeding practices', 'Content for module 2', 2),
-('module_3', 'Health and Safety', 'Keeping your baby safe', 'Content for module 3', 3);
-
-INSERT INTO questions (id, type, question, options, correct_answer, order_index) VALUES
-('pre_q1', 'pre_test', 'What is the recommended age for starting solid foods?', '["4 months", "6 months", "12 months"]'::jsonb, '6 months', 1),
-('pre_q2', 'pre_test', 'How often should you bathe a newborn?', '["Daily", "Every other day", "Weekly"]'::jsonb, 'Every other day', 2),
-('post_q1', 'post_test', 'What is the main benefit of breastfeeding?', '["Convenience", "Bonding and nutrition", "Cost savings"]'::jsonb, 'Bonding and nutrition', 1),
-('post_q2', 'post_test', 'When should you call a doctor for a fever in infants?', '["Above 100°F", "Above 101°F", "Above 102°F"]'::jsonb, 'Above 101°F', 2);
+-- No seed data: modules and questions are added by admins or via app.

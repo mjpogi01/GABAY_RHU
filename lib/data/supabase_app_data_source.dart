@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
 import '../models/module_model.dart';
@@ -5,6 +7,7 @@ import '../models/question_model.dart';
 import '../models/assessment_result_model.dart';
 import '../models/progress_model.dart';
 import '../core/app_data_source.dart';
+import '../services/cloudinary_upload_service.dart';
 
 /// Supabase-backed data source for auth and database
 class SupabaseAppDataSource implements AppDataSource {
@@ -103,10 +106,73 @@ class SupabaseAppDataSource implements AppDataSource {
     await _supabase.from('assessment_results').upsert(result.toJson());
   }
 
+  /// Maps Supabase row (id, title, domain, order_index, cards_json, cover_image_url, content) to ModuleModel
+  static ModuleModel _moduleFromSupabase(Map<String, dynamic> r) {
+    final id = r['id'] as String;
+    final title = r['title'] as String;
+    final domain = r['domain'] as String? ?? 'general';
+    final order = (r['order_index'] as num?)?.toInt() ?? 0;
+    final coverUrl = r['cover_image_url'] as String?;
+    List<ModuleCard> cards;
+    final cardsJson = r['cards_json'] as String?;
+    if (cardsJson != null && cardsJson.isNotEmpty) {
+      try {
+        final list = jsonDecode(cardsJson) as List<dynamic>;
+        cards = list
+            .map((c) => ModuleCard.fromJson(c as Map<String, dynamic>))
+            .toList();
+        if (coverUrl != null && cards.isNotEmpty) {
+          cards = [
+            ModuleCard(
+              id: cards[0].id,
+              content: cards[0].content,
+              imagePath: coverUrl,
+              order: cards[0].order,
+            ),
+            ...cards.skip(1),
+          ];
+        }
+      } catch (_) {
+        cards = [
+          ModuleCard(
+            id: 'card_1',
+            content: r['content']?.toString() ?? '',
+            imagePath: coverUrl,
+            order: 0,
+          ),
+        ];
+      }
+    } else {
+      cards = [
+        ModuleCard(
+          id: 'card_1',
+          content: r['content']?.toString() ?? '',
+          imagePath: coverUrl,
+          order: 0,
+        ),
+      ];
+    }
+    final moduleNumber = r['module_number'] as String?;
+    return ModuleModel(id: id, title: title, domain: domain, order: order, cards: cards, moduleNumber: moduleNumber);
+  }
+
+  static Map<String, dynamic> _moduleToSupabase(ModuleModel m, {String? coverImageUrl}) {
+    final cardsJson = jsonEncode(m.cards.map((c) => c.toJson()).toList());
+    return {
+      'id': m.id,
+      'title': m.title,
+      'domain': m.domain,
+      'order_index': m.order,
+      'cards_json': cardsJson,
+      'cover_image_url': coverImageUrl,
+      'module_number': m.moduleNumber,
+    };
+  }
+
   @override
   Future<List<ModuleModel>> getAllModules() async {
-    final response = await _supabase.from('modules').select();
-    return response.map((json) => ModuleModel.fromJson(json)).toList();
+    final response = await _supabase.from('modules').select().order('order_index');
+    return (response as List<dynamic>).map((r) => _moduleFromSupabase(r as Map<String, dynamic>)).toList();
   }
 
   @override
@@ -115,9 +181,30 @@ class SupabaseAppDataSource implements AppDataSource {
         .from('modules')
         .select()
         .eq('id', id)
-        .single();
+        .maybeSingle();
+    if (response == null) return null;
+    return _moduleFromSupabase(response);
+  }
 
-    return ModuleModel.fromJson(response);
+  @override
+  Future<void> saveModule(ModuleModel module, {String? localCoverImagePath, List<int>? coverImageBytes, String? coverImageExtension}) async {
+    String? coverImageUrl;
+    if (coverImageBytes != null && coverImageBytes.isNotEmpty) {
+      coverImageUrl = await CloudinaryUploadService.uploadImage(
+        bytes: coverImageBytes,
+        publicId: '${module.id}/cover',
+        folder: 'gabay/modules',
+      );
+    } else if (module.cards.isNotEmpty && module.cards.first.imagePath != null && module.cards.first.imagePath!.startsWith('http')) {
+      coverImageUrl = module.cards.first.imagePath;
+    }
+    final row = _moduleToSupabase(module, coverImageUrl: coverImageUrl);
+    await _supabase.from('modules').upsert(row);
+  }
+
+  @override
+  Future<void> deleteModule(String id) async {
+    await _supabase.from('modules').delete().eq('id', id);
   }
 
   @override

@@ -35,6 +35,28 @@ class DesignSystem {
   static double s(BuildContext context, double value) =>
       value * scale(context);
 
+  /// Width of the current screen (or content area).
+  static double width(BuildContext context) =>
+      MediaQuery.sizeOf(context).width;
+
+  /// Layout as ratio of screen width (responsive; baseline 375).
+  /// E.g. wRatio(context, 0.053) ≈ 20px on 375pt width.
+  static double wRatio(BuildContext context, double ratio) =>
+      width(context) * ratio;
+
+  // ─── ADMIN LAYOUT RATIOS (match mockup proportions; baseline 375pt) ───────
+  static const double _base = 375.0;
+  static double adminContentPadding(BuildContext context) => wRatio(context, 20 / _base);  // ~5.3%
+  static double adminGridGap(BuildContext context) => wRatio(context, 12 / _base);        // ~3.2%
+  static double adminSectionGap(BuildContext context) => wRatio(context, 20 / _base);     // ~5.3%
+  static double adminCardRadius(BuildContext context) => s(context, 12);
+  static const double adminKpiAspectRatio = 1.4;
+  static const double adminActionAspectRatio = 1.2;
+  static double adminPieChartSize(BuildContext context) => wRatio(context, 128 / _base);  // chart diameter
+  static double adminChartHeight(BuildContext context) => wRatio(context, 180 / _base);   // bar/scatter height
+  static double adminAvatarLarge(BuildContext context) => wRatio(context, 80 / _base);   // user detail
+  static double adminListTileHeight(BuildContext context) => wRatio(context, 88 / _base); // user row
+
   // ─── FONT SIZES (multiply by scale) ───────────────────────────────────────
 
   static double appTitleSize(BuildContext context) => 24 * scale(context);
@@ -55,14 +77,32 @@ class DesignSystem {
   // ─── INPUT SPECS ──────────────────────────────────────────────────────────
 
   static const double inputHeight = 48;
+  /// Use for proportional layout across screen sizes.
+  static double inputHeightScaled(BuildContext context) => 48 * scale(context);
+  static double inputBorderRadiusScaled(BuildContext context) =>
+      10 * scale(context);
   static const double inputBorderRadius = 10;
   static const EdgeInsets inputPadding =
       EdgeInsets.symmetric(vertical: 14, horizontal: 14);
+  static EdgeInsets inputPaddingScaled(BuildContext context) =>
+      EdgeInsets.symmetric(
+        vertical: 14 * scale(context),
+        horizontal: 14 * scale(context),
+      );
 
   // ─── BUTTON SPECS ─────────────────────────────────────────────────────────
 
   static const double buttonHeight = 52;
+  /// Use for proportional layout across screen sizes.
+  static double buttonHeightScaled(BuildContext context) => 52 * scale(context);
+  static double buttonBorderRadiusScaled(BuildContext context) =>
+      12 * scale(context);
   static const double buttonBorderRadius = 12;
   static const EdgeInsets buttonPadding =
       EdgeInsets.symmetric(vertical: 14, horizontal: 24);
+  static EdgeInsets buttonPaddingScaled(BuildContext context) =>
+      EdgeInsets.symmetric(
+        vertical: 14 * scale(context),
+        horizontal: 24 * scale(context),
+      );
 }

@@ -39,10 +39,22 @@ dependencies:
 
   # Supabase (phone auth, backend)
   supabase_flutter: ^2.8.0
+
+  # Image upload (module assets – free tier)
+  http: ^1.2.2
   
   # UI utilities
   cupertino_icons: ^1.0.8
   google_fonts: ^6.2.1
+
+  # Admin: image upload & rich text
+  image_picker: ^1.0.7
+  flutter_quill: ^11.5.0
+  flutter_quill_extensions:
+    git:
+      url: https://github.com/singerdmx/flutter-quill.git
+      ref: v11.5.0
+      path: flutter_quill_extensions
 
 dev_dependencies:
   flutter_test:

@@ -17,6 +17,7 @@ class ModuleRepository {
         cards: cards
             .map((c) => ModuleCard.fromJson(c as Map<String, dynamic>))
             .toList(),
+        moduleNumber: r['module_number'] as String?,
       );
     }).toList();
   }
@@ -41,9 +42,31 @@ class ModuleRepository {
           'domain': m.domain,
           'ord': m.order,
           'cardsJson': jsonEncode(m.cards.map((c) => c.toJson()).toList()),
+          'module_number': m.moduleNumber,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     }
+  }
+
+  static Future<void> saveModule(ModuleModel module) async {
+    final db = await DatabaseService.database;
+    await db.insert(
+      'modules',
+      {
+        'id': module.id,
+        'title': module.title,
+        'domain': module.domain,
+        'ord': module.order,
+        'cardsJson': jsonEncode(module.cards.map((c) => c.toJson()).toList()),
+        'module_number': module.moduleNumber,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<void> deleteModule(String id) async {
+    final db = await DatabaseService.database;
+    await db.delete('modules', where: 'id = ?', whereArgs: [id]);
   }
 }

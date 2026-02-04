@@ -29,6 +29,8 @@ class _SplashScreenState extends State<SplashScreen> {
     String route;
     if (provider.user == null) {
       route = AppRoutes.landing;
+    } else if (provider.user!.isAdmin) {
+      route = AppRoutes.adminDashboard;
     } else {
       route = AppRoutes.dashboard;
     }

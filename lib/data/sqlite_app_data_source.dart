@@ -43,6 +43,13 @@ class SqliteAppDataSource implements AppDataSource {
   Future<ModuleModel?> getModuleById(String id) => ModuleRepository.getModuleById(id);
 
   @override
+  Future<void> saveModule(ModuleModel module, {String? localCoverImagePath, List<int>? coverImageBytes, String? coverImageExtension}) =>
+      ModuleRepository.saveModule(module);
+
+  @override
+  Future<void> deleteModule(String id) => ModuleRepository.deleteModule(id);
+
+  @override
   Future<List<String>> getAssignedModuleIds(String userId) =>
       ProgressRepository.getAssignedModuleIds(userId);
 

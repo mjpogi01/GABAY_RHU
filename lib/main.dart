@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'core/theme.dart';
 import 'core/app_routes.dart';
 import 'core/data_source_factory.dart';
@@ -38,6 +40,16 @@ class GabayApp extends StatelessWidget {
         title: 'GABAY',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
+        localizationsDelegates: const [
+          quill.FlutterQuillLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('en'),
+          Locale('fil'),
+        ],
         initialRoute: AppRoutes.splash,
         onGenerateRoute: AppRoutes.generate,
       ),

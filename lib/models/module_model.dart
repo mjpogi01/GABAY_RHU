@@ -5,6 +5,8 @@ class ModuleModel {
   final String domain; // Knowledge domain
   final int order;
   final List<ModuleCard> cards;
+  /// Admin-defined display number (e.g. M01, 1). Shown on cards; separate from internal id.
+  final String? moduleNumber;
 
   const ModuleModel({
     required this.id,
@@ -12,6 +14,7 @@ class ModuleModel {
     required this.domain,
     required this.order,
     required this.cards,
+    this.moduleNumber,
   });
 
   Map<String, dynamic> toJson() => {
@@ -20,6 +23,7 @@ class ModuleModel {
         'domain': domain,
         'order': order,
         'cards': cards.map((c) => c.toJson()).toList(),
+        'moduleNumber': moduleNumber,
       };
 
   factory ModuleModel.fromJson(Map<String, dynamic> json) => ModuleModel(
@@ -30,6 +34,7 @@ class ModuleModel {
         cards: (json['cards'] as List<dynamic>)
             .map((c) => ModuleCard.fromJson(c as Map<String, dynamic>))
             .toList(),
+        moduleNumber: json['moduleNumber'] as String?,
       );
 }
 

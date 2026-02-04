@@ -8,6 +8,7 @@ import '../screens/post_test_screen.dart';
 import '../screens/certificate_screen.dart';
 import '../screens/feedback_screen.dart';
 import '../screens/main_shell.dart';
+import '../screens/admin/admin_shell.dart';
 import '../screens/baby_guide_screen.dart';
 import '../screens/help_screen.dart';
 import '../screens/settings_screen.dart';
@@ -26,6 +27,7 @@ class AppRoutes {
   static const String babyGuide = '/baby-guide';
   static const String help = '/help';
   static const String settings = '/settings';
+  static const String adminDashboard = '/admin';
 
   static Route<dynamic> generate(RouteSettings settings) {
     switch (settings.name) {
@@ -55,6 +57,8 @@ class AppRoutes {
         );
       case dashboard:
         return MaterialPageRoute(builder: (_) => const MainShell());
+      case adminDashboard:
+        return MaterialPageRoute(builder: (_) => const AdminShell());
       case preTest:
         return MaterialPageRoute(builder: (_) => const PreTestScreen());
       case module:

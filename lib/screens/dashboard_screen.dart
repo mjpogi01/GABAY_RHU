@@ -5,7 +5,7 @@ import '../core/app_routes.dart';
 import '../core/design_system.dart';
 import '../providers/app_provider.dart';
 
-/// Home/Dashboard - Standardized layout matching design
+/// Home - Standardized layout matching design
 class DashboardScreen extends StatelessWidget {
   final VoidCallback? onAvatarTap;
 
@@ -291,10 +291,20 @@ class DashboardScreen extends StatelessWidget {
     bool isCompleted,
     VoidCallback onTap,
   ) {
+    final coverImagePath = module.cards.isNotEmpty
+        ? module.cards.first.imagePath
+        : null;
+    final previewText = module.cards.isNotEmpty
+        ? module.cards.first.content
+        : '';
+    final shortPreview = previewText.length > 80
+        ? '${previewText.substring(0, 80)}...'
+        : previewText;
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: MediaQuery.of(context).size.width * 0.75, // 75% of screen width for horizontal scroll
+        width: MediaQuery.of(context).size.width * 0.75,
         height: DesignSystem.s(context, 200),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(DesignSystem.s(context, 16)),
@@ -307,20 +317,36 @@ class DashboardScreen extends StatelessWidget {
           ],
         ),
         child: Stack(
+          fit: StackFit.expand,
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(DesignSystem.s(context, 16)),
-              child: Container(
-                height: double.infinity,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.blue.shade50,
-                      Colors.grey.shade100,
-                    ],
-                  ),
+              child: coverImagePath != null && coverImagePath.isNotEmpty
+                  ? _buildModuleCardImage(coverImagePath)
+                  : Container(
+                      height: double.infinity,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.blue.shade50,
+                            Colors.grey.shade100,
+                          ],
+                        ),
+                      ),
+                    ),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(DesignSystem.s(context, 16)),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withOpacity(0.7),
+                  ],
                 ),
               ),
             ),
@@ -334,31 +360,85 @@ class DashboardScreen extends StatelessWidget {
                     'Module ${module.order}',
                     style: TextStyle(
                       fontSize: DesignSystem.captionSize(context),
-                      color: DesignSystem.textSecondary,
+                      color: Colors.white.withOpacity(0.9),
                     ),
                   ),
-                  Text(
-                    module.title,
-                    style: TextStyle(
-                      fontSize: DesignSystem.s(context, 18),
-                      fontWeight: FontWeight.bold,
-                      color: DesignSystem.textPrimary,
-                    ),
-                  ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      'Read More',
-                      style: TextStyle(
-                        fontSize: DesignSystem.bodyTextSize(context),
-                        color: DesignSystem.primary,
-                        fontWeight: FontWeight.w600,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        module.title,
+                        style: TextStyle(
+                          fontSize: DesignSystem.s(context, 18),
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
+                      if (shortPreview.isNotEmpty) ...[
+                        SizedBox(height: DesignSystem.s(context, 4)),
+                        Text(
+                          shortPreview,
+                          style: TextStyle(
+                            fontSize: DesignSystem.captionSize(context),
+                            color: Colors.white.withOpacity(0.9),
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      SizedBox(height: DesignSystem.s(context, 8)),
+                      Text(
+                        'Read more',
+                        style: TextStyle(
+                          fontSize: DesignSystem.bodyTextSize(context),
+                          color: DesignSystem.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModuleCardImage(String imagePath) {
+    if (imagePath.startsWith('assets/')) {
+      return Image.asset(
+        imagePath,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (_, __, ___) => _gradientFallback(),
+      );
+    }
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return Image.network(
+        imagePath,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (_, __, ___) => _gradientFallback(),
+      );
+    }
+    return _gradientFallback();
+  }
+
+  Widget _gradientFallback() {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.blue.shade50,
+            Colors.grey.shade100,
           ],
         ),
       ),

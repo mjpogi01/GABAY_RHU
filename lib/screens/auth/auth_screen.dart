@@ -1187,21 +1187,10 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         final provider = context.read<AppProvider>();
         await provider.init();
         if (!context.mounted) return;
-        if (provider.user == null && PhoneAuthService.currentUser != null) {
-          final u = PhoneAuthService.currentUser!;
-          final phone = PhoneAuthService.getPhoneFromUser(u) ?? _phoneController.text.trim();
-          final minimalUser = UserModel(
-            id: u.id,
-            anonymizedId: 'anon_${u.id}',
-            role: 'parent',
-            createdAt: DateTime.now(),
-            phoneNumber: phone,
-          );
-          await provider.setUser(minimalUser);
-          if (!context.mounted) return;
-        }
+        // Use profile from DB so role (e.g. admin) is preserved. Do not overwrite with a new 'parent' user.
         if (provider.user != null) {
-          Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+          final route = provider.user!.isAdmin ? AppRoutes.adminDashboard : AppRoutes.dashboard;
+          Navigator.pushReplacementNamed(context, route);
         } else {
           setState(() => _authError = 'Could not load session. Please try again.');
         }
@@ -1419,9 +1408,8 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     // Save user profile
     await provider.setUser(user);
     if (!context.mounted) return;
-    
-    if (!context.mounted) return;
-    Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+    final route = provider.user?.isAdmin == true ? AppRoutes.adminDashboard : AppRoutes.dashboard;
+    Navigator.pushReplacementNamed(context, route);
   }
 
   Future<void> _demoLogin(BuildContext context) async {
@@ -1440,6 +1428,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     );
     await provider.setUser(user);
     if (!context.mounted) return;
-    Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+    final route = provider.user?.isAdmin == true ? AppRoutes.adminDashboard : AppRoutes.dashboard;
+    Navigator.pushReplacementNamed(context, route);
   }
 }

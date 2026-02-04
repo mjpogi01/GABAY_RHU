@@ -95,6 +95,17 @@ class MemoryAppDataSource implements AppDataSource {
   }
 
   @override
+  Future<void> saveModule(ModuleModel module, {String? localCoverImagePath, List<int>? coverImageBytes, String? coverImageExtension}) async {
+    _modules.removeWhere((m) => m.id == module.id);
+    _modules.add(module);
+  }
+
+  @override
+  Future<void> deleteModule(String id) async {
+    _modules.removeWhere((m) => m.id == id);
+  }
+
+  @override
   Future<List<String>> getAssignedModuleIds(String userId) async {
     return _assignedModules[userId] ?? [];
   }

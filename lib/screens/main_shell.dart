@@ -4,7 +4,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/app_routes.dart';
 import '../providers/app_provider.dart';
 import 'dashboard_screen.dart';
-import 'baby_guide_screen.dart';
 import 'help_screen.dart';
 import 'settings_screen.dart';
 
@@ -33,7 +32,6 @@ class _MainShellState extends State<MainShell> {
 
   PreferredSizeWidget? _buildAppBar() {
     final titles = {
-      'BABY_GUIDE': 'Baby Guide',
       'HELP': 'Help',
       'SETTINGS': 'Settings',
     };
@@ -162,7 +160,6 @@ class _MainShellState extends State<MainShell> {
   }
 
   Widget _buildBody() {
-    if (_selectedDrawerItem == 'BABY_GUIDE') return const BabyGuideScreen();
     if (_selectedDrawerItem == 'HELP') return const HelpScreen();
     if (_selectedDrawerItem == 'SETTINGS') return const SettingsScreen();
     return DashboardScreen(onAvatarTap: _openDrawer);
