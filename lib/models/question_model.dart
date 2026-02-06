@@ -10,6 +10,10 @@ class QuestionModel {
   final List<String> options;
   final int correctIndex;
   final String? explanation; // Shown after assessment for feedback
+  /// Module to assign when user gets this question wrong (pre-test).
+  final String? referenceModuleId;
+  /// Display order in admin and assessment (0-based). Preserved on edit.
+  final int orderIndex;
 
   const QuestionModel({
     required this.id,
@@ -19,6 +23,8 @@ class QuestionModel {
     required this.options,
     required this.correctIndex,
     this.explanation,
+    this.referenceModuleId,
+    this.orderIndex = 0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -29,6 +35,8 @@ class QuestionModel {
         'options': options,
         'correctIndex': correctIndex,
         'explanation': explanation,
+        'referenceModuleId': referenceModuleId,
+        'order_index': orderIndex,
       };
 
   factory QuestionModel.fromJson(Map<String, dynamic> json) {
@@ -65,7 +73,12 @@ class QuestionModel {
     final pairedId = json['pairedId'] as String? ?? id; // Default to same as id if not provided
     final domain = json['domain'] as String? ?? 'general'; // Default domain
     final explanation = json['explanation'] as String?; // Optional field
-    
+    final referenceModuleId = json['referenceModuleId'] as String?;
+    final orderIndexRaw = json['order_index'];
+    final orderIndex = orderIndexRaw is int
+        ? orderIndexRaw
+        : (orderIndexRaw is num ? orderIndexRaw.toInt() : 0);
+
     return QuestionModel(
       id: id,
       pairedId: pairedId,
@@ -74,6 +87,8 @@ class QuestionModel {
       options: options,
       correctIndex: correctIndex >= 0 ? correctIndex : 0,
       explanation: explanation,
+      referenceModuleId: referenceModuleId,
+      orderIndex: orderIndex,
     );
   }
 }

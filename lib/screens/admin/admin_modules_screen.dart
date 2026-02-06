@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_quill_extensions/flutter_quill_extensions.dart';
+import 'package:dart_quill_delta/dart_quill_delta.dart';
 import '../../core/design_system.dart';
 import '../../providers/app_provider.dart';
 import '../../models/module_model.dart';
@@ -43,22 +44,33 @@ String _quillDeltaToPlainText(String? content) {
 }
 
 /// Parses Quill content JSON, uploads any inline image embeds (base64 or local file) to Cloudinary,
-/// and returns content JSON with image values replaced by HTTPS URLs so they display and persist.
-Future<String> _processQuillContentImageUrls(String contentJson, String moduleId) async {
+/// and returns content JSON with image values replaced by HTTPS URLs. Optionally [coverImageBytes]
+/// can be passed so the cover image is not included in the content (stripped from the body).
+Future<String> _processQuillContentImageUrls(String contentJson, String moduleId, {List<int>? coverImageBytes}) async {
   if (contentJson.trim().isEmpty) return contentJson;
   try {
     final decoded = jsonDecode(contentJson);
     if (decoded is! List || decoded.isEmpty) return contentJson;
     final list = List<Map<String, dynamic>>.from(decoded.map((e) => e is Map<String, dynamic> ? Map<String, dynamic>.from(e) : <String, dynamic>{}));
+    final result = <Map<String, dynamic>>[];
     int imageIndex = 0;
     for (int i = 0; i < list.length; i++) {
       final op = list[i];
       final insert = op['insert'];
-      if (insert is! Map<String, dynamic>) continue;
+      if (insert is! Map<String, dynamic>) {
+        result.add(op);
+        continue;
+      }
       final imageValue = insert['image'];
-      if (imageValue is! String || imageValue.isEmpty) continue;
+      if (imageValue is! String || imageValue.isEmpty) {
+        result.add(op);
+        continue;
+      }
       // Already a remote URL – keep as is
-      if (imageValue.startsWith('http://') || imageValue.startsWith('https://')) continue;
+      if (imageValue.startsWith('http://') || imageValue.startsWith('https://')) {
+        result.add(op);
+        continue;
+      }
       List<int>? bytes;
       String? ext = 'png';
       if (imageValue.startsWith('data:image/') && imageValue.contains(';base64,')) {
@@ -70,6 +82,7 @@ Future<String> _processQuillContentImageUrls(String contentJson, String moduleId
           if (mime == 'gif') ext = 'gif';
           if (mime == 'webp') ext = 'webp';
         } catch (_) {
+          result.add(op);
           continue;
         }
       } else if (!kIsWeb && (imageValue.startsWith('/') || imageValue.contains(RegExp(r'^[A-Za-z]:')))) {
@@ -82,7 +95,14 @@ Future<String> _processQuillContentImageUrls(String contentJson, String moduleId
           if (name.endsWith('.webp')) ext = 'webp';
         }
       }
-      if (bytes == null || bytes.isEmpty) continue;
+      // Skip this embed if it is the cover image (do not add to content)
+      if (coverImageBytes != null && bytes != null && bytes.isNotEmpty && listEquals(bytes, coverImageBytes)) {
+        continue;
+      }
+      if (bytes == null || bytes.isEmpty) {
+        result.add(op);
+        continue;
+      }
       final publicId = 'inline_$imageIndex.$ext';
       final folder = 'gabay/modules/$moduleId';
       final url = await CloudinaryUploadService.uploadImage(
@@ -93,9 +113,10 @@ Future<String> _processQuillContentImageUrls(String contentJson, String moduleId
       if (url != null && url.isNotEmpty) {
         insert['image'] = url;
       }
+      result.add(op);
       imageIndex++;
     }
-    return jsonEncode(list);
+    return jsonEncode(result);
   } catch (_) {
     return contentJson;
   }
@@ -163,14 +184,20 @@ class _AdminModulesScreenState extends State<AdminModulesScreen> {
       ),
       body: Column(
         children: [
+          // Search as tool: separated from card content
           Padding(
-            padding: EdgeInsets.all(DesignSystem.adminContentPadding(context)),
+            padding: EdgeInsets.fromLTRB(
+              DesignSystem.adminContentPadding(context),
+              DesignSystem.adminContentPadding(context),
+              DesignSystem.adminContentPadding(context),
+              DesignSystem.s(context, 8),
+            ),
             child: TextField(
               controller: _searchController,
               onChanged: (v) => setState(() => _query = v),
-              style: TextStyle(fontSize: DesignSystem.captionSize(context)),
+              style: TextStyle(fontSize: DesignSystem.bodyTextSize(context)),
               decoration: InputDecoration(
-                hintText: 'Search module number or title.',
+                hintText: 'Search module number or title',
                 hintStyle: TextStyle(fontSize: DesignSystem.captionSize(context), color: DesignSystem.textMuted),
                 prefixIcon: Icon(Icons.search, color: DesignSystem.textMuted, size: DesignSystem.s(context, 22)),
                 filled: true,
@@ -203,28 +230,21 @@ class _AdminModulesScreenState extends State<AdminModulesScreen> {
                   return Center(
                     child: Text(
                       list.isEmpty ? 'No modules yet' : 'No matches',
-                      style: TextStyle(color: DesignSystem.textSecondary),
+                      style: const TextStyle(color: DesignSystem.textSecondary),
                     ),
                   );
                 }
-                return ListView.builder(
-                  padding: EdgeInsets.symmetric(horizontal: DesignSystem.adminContentPadding(context)),
-                  itemCount: filtered.length,
-                  itemBuilder: (_, i) {
-                    final m = filtered[i];
-                    return _ModuleCard(
-                      module: m,
-                      onView: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => ModuleScreen(moduleId: m.id, isPreview: true),
-                          ),
-                        );
-                      },
-                      onEdit: () => _showEditModuleModal(context, m),
-                      onDelete: () => _confirmDelete(context, m),
+                return _AdaptiveModuleList(
+                  modules: filtered,
+                  onView: (m) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => ModuleScreen(moduleId: m.id, isPreview: true),
+                      ),
                     );
                   },
+                  onEdit: _showEditModuleModal,
+                  onDelete: _confirmDelete,
                 );
               },
             ),
@@ -285,20 +305,24 @@ class _AdminModulesScreenState extends State<AdminModulesScreen> {
     final id = existingModule?.id ?? 'mod_${DateTime.now().millisecondsSinceEpoch}';
     final order = existingModule?.order ?? 999;
     final number = moduleNumber.trim();
-    // Upload inline RTE images (base64/file) to Cloudinary and replace with URLs
-    final processedContent = await _processQuillContentImageUrls(content, id);
+    // Upload inline RTE images (base64/file) to Cloudinary and replace with URLs.
+    // Pass cover image bytes so the cover is not included in the body content.
+    final processedContent = await _processQuillContentImageUrls(content, id, coverImageBytes: imageBytes);
     final existingCoverPath = existingModule?.cards.isNotEmpty == true ? existingModule!.cards.first.imagePath : null;
-    final keepCoverUrl = !clearCover && imageBytes == null && existingCoverPath != null && existingCoverPath.startsWith('http');
+    final existingHttpCover = existingCoverPath != null && existingCoverPath.startsWith('http') ? existingCoverPath : null;
+    final keepCoverUrl = !clearCover && imageBytes == null && existingHttpCover != null;
+    // When user uploads a new image, do NOT pass existing URL so the data source uses only the new upload result.
+    final coverPathForSave = keepCoverUrl ? existingHttpCover : null;
     final module = ModuleModel(
       id: id,
       title: title.trim().isEmpty ? 'Untitled module' : title.trim(),
       domain: existingModule?.domain ?? 'general',
       order: order,
-      cards: [ModuleCard(id: 'card_1', content: processedContent, imagePath: keepCoverUrl ? existingCoverPath : null, order: 0)],
+      cards: [ModuleCard(id: 'card_1', content: processedContent, imagePath: coverPathForSave, order: 0)],
       moduleNumber: number.isEmpty ? null : number,
     );
     try {
-      await ds.saveModule(module, coverImageBytes: imageBytes, coverImageExtension: imageExtension);
+      await ds.saveModule(module, coverImageBytes: imageBytes, coverImageExtension: imageExtension, clearCover: clearCover);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Module saved')));
         _refreshModules();
@@ -341,6 +365,8 @@ class _AdminModulesScreenState extends State<AdminModulesScreen> {
   }
 }
 
+/// Scan-first module card: meta row, title (max 2 lines), preview (max 2 lines).
+/// Entire card tappable; menu (⋮) secondary. No fixed height.
 class _ModuleCard extends StatelessWidget {
   final ModuleModel module;
   final VoidCallback onView;
@@ -358,62 +384,62 @@ class _ModuleCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final rawContent = module.cards.isNotEmpty ? module.cards.first.content : '';
     final plainText = _quillDeltaToPlainText(rawContent);
-    final description = plainText.isEmpty ? 'No content' : plainText;
-    final shortDesc = description.length > 120 ? '${description.substring(0, 120)}...' : description;
+    final preview = plainText.trim().isEmpty
+        ? 'No content'
+        : (plainText.length > 140 ? '${plainText.substring(0, 140).trim()}…' : plainText);
 
     final moduleLabel = (module.moduleNumber != null && module.moduleNumber!.isNotEmpty)
         ? _displayModuleNumber(module.moduleNumber!)
-        : null;
-    final moduleNumSize = DesignSystem.sectionTitleSize(context);
+        : 'Module';
+
+    final metaSize = DesignSystem.captionSize(context);
     final titleSize = DesignSystem.bodyTextSize(context);
-    final descSize = DesignSystem.captionSize(context);
+    final previewSize = DesignSystem.captionSize(context);
 
     return Card(
       margin: EdgeInsets.only(bottom: DesignSystem.adminGridGap(context)),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(DesignSystem.adminCardRadius(context))),
-      child: Padding(
-        padding: EdgeInsets.all(DesignSystem.adminContentPadding(context)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(DesignSystem.adminCardRadius(context)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        color: DesignSystem.cardSurface,
+        child: InkWell(
+          onTap: onView,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              DesignSystem.adminContentPadding(context),
+              DesignSystem.s(context, 8),
+              DesignSystem.adminContentPadding(context),
+              DesignSystem.adminContentPadding(context),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: RichText(
-                    text: TextSpan(
-                      style: TextStyle(color: DesignSystem.textPrimary, height: 1.3),
-                      children: [
-                        if (moduleLabel != null)
-                          TextSpan(
-                            text: '$moduleLabel ',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: moduleNumSize,
-                            ),
-                          ),
-                        TextSpan(
-                          text: module.title,
-                          style: TextStyle(
-                            fontWeight: FontWeight.normal,
-                            fontSize: titleSize,
-                          ),
-                        ),
-                      ],
+                // Row 1 – Meta: module number (muted) + menu (compact so row doesn’t add gap above title)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      moduleLabel,
+                      style: TextStyle(
+                        fontSize: metaSize,
+                        color: DesignSystem.textMuted,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ),
-                Padding(
-                  padding: EdgeInsets.only(left: DesignSystem.s(context, 18)),
-                  child: PopupMenuButton<String>(
+                    PopupMenuButton<String>(
                       padding: EdgeInsets.zero,
-                      constraints: BoxConstraints(minWidth: 0, minHeight: 0),
-                      iconSize: DesignSystem.s(context, 24),
+                      constraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                      iconSize: DesignSystem.s(context, 22),
                       child: SizedBox(
-                        height: moduleNumSize * 1.3,
-                        width: DesignSystem.s(context, 40),
-                        child: Icon(Icons.more_vert, size: DesignSystem.s(context, 24)),
+                        height: DesignSystem.s(context, 28),
+                        width: DesignSystem.s(context, 32),
+                        child: Icon(Icons.more_vert, size: DesignSystem.s(context, 22), color: DesignSystem.textSecondary),
                       ),
                       onSelected: (v) {
                         if (v == 'View') onView();
@@ -426,23 +452,101 @@ class _ModuleCard extends StatelessWidget {
                         const PopupMenuItem(value: 'Delete', child: Text('Delete')),
                       ],
                     ),
+                  ],
+                ),
+                // Row 2 – Title (strong, max 2 lines)
+                SizedBox(height: DesignSystem.s(context, 2)),
+                Text(
+                  module.title,
+                  style: TextStyle(
+                    fontSize: titleSize,
+                    fontWeight: FontWeight.w600,
+                    color: DesignSystem.textPrimary,
+                    height: 1.3,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                // Row 3 – Preview (lighter, max 2 lines)
+                SizedBox(height: DesignSystem.s(context, 4)),
+                Text(
+                  preview,
+                  style: TextStyle(
+                    fontSize: previewSize,
+                    color: DesignSystem.textSecondary,
+                    height: 1.35,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
-            SizedBox(height: DesignSystem.s(context, 4)),
-            Text(
-              shortDesc,
-              style: TextStyle(
-                fontSize: descSize,
-                color: DesignSystem.textSecondary,
-                height: 1.35,
-              ),
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// Breakpoints: phones single column; tablets 2-column grid. More padding on larger screens.
+const double _kTabletBreakpoint = 720;
+const double _kLargePhoneBreakpoint = 500;
+
+class _AdaptiveModuleList extends StatelessWidget {
+  final List<ModuleModel> modules;
+  final void Function(ModuleModel m) onView;
+  final void Function(BuildContext context, ModuleModel m) onEdit;
+  final void Function(BuildContext context, ModuleModel m) onDelete;
+
+  const _AdaptiveModuleList({
+    required this.modules,
+    required this.onView,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final isTablet = width >= _kTabletBreakpoint;
+    final horizontalPadding = width >= _kLargePhoneBreakpoint
+        ? DesignSystem.adminContentPadding(context) * 1.5
+        : DesignSystem.adminContentPadding(context);
+
+    if (isTablet) {
+      return GridView.builder(
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: DesignSystem.s(context, 8)),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: DesignSystem.adminGridGap(context),
+          crossAxisSpacing: DesignSystem.adminGridGap(context),
+          childAspectRatio: 1.15,
+        ),
+        itemCount: modules.length,
+        itemBuilder: (_, i) {
+          final m = modules[i];
+          return _ModuleCard(
+            module: m,
+            onView: () => onView(m),
+            onEdit: () => onEdit(context, m),
+            onDelete: () => onDelete(context, m),
+          );
+        },
+      );
+    }
+
+    return ListView.builder(
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: DesignSystem.s(context, 8)),
+      itemCount: modules.length,
+      itemBuilder: (_, i) {
+        final m = modules[i];
+        return _ModuleCard(
+          module: m,
+          onView: () => onView(m),
+          onEdit: () => onEdit(context, m),
+          onDelete: () => onDelete(context, m),
+        );
+      },
     );
   }
 }
@@ -485,6 +589,7 @@ class _AddEditModuleSheetState extends State<_AddEditModuleSheet> {
   late final quill.QuillController _quillController;
   late final ScrollController _scrollController;
   late final FocusNode _focusNode;
+  late final FocusNode _moduleNumberFocusNode;
   final GlobalKey _contentSectionKey = GlobalKey();
   XFile? _imageFile;
   final ImagePicker _picker = ImagePicker();
@@ -501,6 +606,7 @@ class _AddEditModuleSheetState extends State<_AddEditModuleSheet> {
     _scrollController = ScrollController();
     _focusNode = FocusNode();
     _focusNode.addListener(_scrollToContentWhenFocused);
+    _moduleNumberFocusNode = FocusNode();
     _quillController = _createQuillController(widget.initialContent);
   }
 
@@ -513,6 +619,30 @@ class _AddEditModuleSheetState extends State<_AddEditModuleSheet> {
         Scrollable.ensureVisible(ctx, alignment: 0.3, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
       }
     });
+  }
+
+  /// Custom paste: show pasted text (fix plain-text-only paste). Builds Delta from plain text so content appears correctly.
+  Future<bool> _handleRtePaste(PasteTextIntent intent) async {
+    try {
+      final plainText = (await Clipboard.getData(Clipboard.kTextPlain))?.text ?? '';
+      if (plainText.isEmpty) return false;
+
+      final delta = Delta()..insert(plainText);
+
+      final sel = _quillController.selection;
+      final index = sel.start;
+      final len = sel.end - sel.start;
+      final newLen = delta.length;
+      _quillController.replaceText(
+        index,
+        len,
+        delta,
+        TextSelection.collapsed(offset: index + newLen),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   quill.QuillController _createQuillController(String? initialContent) {
@@ -545,6 +675,7 @@ class _AddEditModuleSheetState extends State<_AddEditModuleSheet> {
     _quillController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
+    _moduleNumberFocusNode.dispose();
     super.dispose();
   }
 
@@ -633,10 +764,11 @@ class _AddEditModuleSheetState extends State<_AddEditModuleSheet> {
               ),
             ),
             SizedBox(height: DesignSystem.s(context, 12)),
-            Text('Module number', style: TextStyle(fontWeight: FontWeight.w600, color: DesignSystem.textPrimary)),
-            SizedBox(height: 4),
+            const Text('Module number', style: TextStyle(fontWeight: FontWeight.w600, color: DesignSystem.textPrimary)),
+            const SizedBox(height: 4),
             TextField(
               controller: _moduleNumberController,
+              focusNode: _moduleNumberFocusNode,
               keyboardType: TextInputType.number,
               maxLength: 2,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -653,8 +785,8 @@ class _AddEditModuleSheetState extends State<_AddEditModuleSheet> {
               onChanged: (_) => setState(() => _moduleNumberError = null),
             ),
             SizedBox(height: DesignSystem.adminSectionGap(context)),
-            Text('Image', style: TextStyle(fontWeight: FontWeight.w600, color: DesignSystem.textPrimary)),
-            SizedBox(height: 4),
+            const Text('Image', style: TextStyle(fontWeight: FontWeight.w600, color: DesignSystem.textPrimary)),
+            const SizedBox(height: 4),
             GestureDetector(
               onTap: _showImageSourceChoice,
               child: Container(
@@ -671,8 +803,8 @@ class _AddEditModuleSheetState extends State<_AddEditModuleSheet> {
               ),
             ),
             SizedBox(height: DesignSystem.adminSectionGap(context)),
-            Text('Title', style: TextStyle(fontWeight: FontWeight.w600, color: DesignSystem.textPrimary)),
-            SizedBox(height: 4),
+            const Text('Title', style: TextStyle(fontWeight: FontWeight.w600, color: DesignSystem.textPrimary)),
+            const SizedBox(height: 4),
             TextField(
               controller: _titleController,
               decoration: InputDecoration(
@@ -683,8 +815,8 @@ class _AddEditModuleSheetState extends State<_AddEditModuleSheet> {
               ),
             ),
             SizedBox(height: DesignSystem.s(context, 16)),
-            Text('Content', style: TextStyle(fontWeight: FontWeight.w600, color: DesignSystem.textPrimary)),
-            SizedBox(height: 4),
+            const Text('Content', style: TextStyle(fontWeight: FontWeight.w600, color: DesignSystem.textPrimary)),
+            const SizedBox(height: 4),
             Container(
               key: _contentSectionKey,
               decoration: BoxDecoration(
@@ -711,11 +843,11 @@ class _AddEditModuleSheetState extends State<_AddEditModuleSheet> {
                       showColorButton: false,
                       showBackgroundColorButton: false,
                       showClearFormat: false,
-                      showAlignmentButtons: false,
-                      showLeftAlignment: false,
-                      showCenterAlignment: false,
-                      showRightAlignment: false,
-                      showJustifyAlignment: false,
+                      showAlignmentButtons: true,
+                      showLeftAlignment: true,
+                      showCenterAlignment: true,
+                      showRightAlignment: true,
+                      showJustifyAlignment: true,
                       showHeaderStyle: false,
                       showListNumbers: true,
                       showListBullets: true,
@@ -735,16 +867,44 @@ class _AddEditModuleSheetState extends State<_AddEditModuleSheet> {
                   const Divider(height: 1),
                   SizedBox(
                     height: 240,
-                    child: quill.QuillEditor.basic(
-                      controller: _quillController,
-                      focusNode: _focusNode,
-                      scrollController: _scrollController,
-                      config: quill.QuillEditorConfig(
-                        placeholder: 'Write module content... Use the image button to insert and layout images.',
-                        padding: EdgeInsets.symmetric(horizontal: DesignSystem.s(context, 12), vertical: DesignSystem.s(context, 8)),
-                        embedBuilders: kIsWeb
-                            ? FlutterQuillEmbeds.editorWebBuilders()
-                            : FlutterQuillEmbeds.editorBuilders(),
+                    child: Shortcuts(
+                      shortcuts: const <ShortcutActivator, Intent>{
+                        SingleActivator(LogicalKeyboardKey.keyV, control: true): const PasteTextIntent(SelectionChangedCause.keyboard),
+                        SingleActivator(LogicalKeyboardKey.keyV, meta: true): const PasteTextIntent(SelectionChangedCause.keyboard),
+                      },
+                      child: Actions(
+                        actions: <Type, Action<Intent>>{
+                          PasteTextIntent: CallbackAction<PasteTextIntent>(
+                            onInvoke: (PasteTextIntent intent) => _handleRtePaste(intent),
+                          ),
+                        },
+                        child: quill.QuillEditor.basic(
+                          controller: _quillController,
+                          focusNode: _focusNode,
+                          scrollController: _scrollController,
+                          config: quill.QuillEditorConfig(
+                            placeholder: 'Write module content... Use the image button to insert and layout images.',
+                            padding: EdgeInsets.symmetric(horizontal: DesignSystem.s(context, 12), vertical: DesignSystem.s(context, 8)),
+                            embedBuilders: kIsWeb
+                                ? FlutterQuillEmbeds.editorWebBuilders()
+                                : FlutterQuillEmbeds.editorBuilders(),
+                            customStyles: quill.DefaultStyles.getInstance(context).merge(
+                              quill.DefaultStyles(
+                                placeHolder: quill.DefaultTextBlockStyle(
+                                  DefaultTextStyle.of(context).style.copyWith(
+                                    fontSize: 14,
+                                    height: 1.5,
+                                    color: Colors.grey.withValues(alpha: 0.6),
+                                  ),
+                                  quill.HorizontalSpacing.zero,
+                                  quill.VerticalSpacing.zero,
+                                  quill.VerticalSpacing.zero,
+                                  null,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -861,7 +1021,7 @@ class _AddEditModuleSheetState extends State<_AddEditModuleSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.add_photo_alternate_outlined, size: 48, color: DesignSystem.textMuted),
+          const Icon(Icons.add_photo_alternate_outlined, size: 48, color: DesignSystem.textMuted),
           SizedBox(height: DesignSystem.s(context, 8)),
           Text(
             'Tap to upload image',

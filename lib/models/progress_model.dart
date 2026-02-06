@@ -25,17 +25,32 @@ class ModuleProgressModel {
         'completedAt': completedAt?.toIso8601String(),
       };
 
-  factory ModuleProgressModel.fromJson(Map<String, dynamic> json) =>
-      ModuleProgressModel(
-        id: json['id']?.toString() ?? '',
-        userId: json['userId']?.toString() ?? '',
-        moduleId: json['moduleId']?.toString() ?? '',
-        completed: (json['completed'] == 1 || json['completed'] == true),
-        timeSpentSeconds: json['timeSpentSeconds'] is int
-            ? json['timeSpentSeconds'] as int
-            : int.tryParse(json['timeSpentSeconds']?.toString() ?? '') ?? 0,
-        completedAt: json['completedAt'] != null
-            ? DateTime.tryParse(json['completedAt'].toString())
-            : null,
-      );
+  factory ModuleProgressModel.fromJson(Map<String, dynamic> json) {
+    // Accept both camelCase (app/SQLite) and snake_case (Supabase/Postgres)
+    final id = json['id']?.toString() ?? '';
+    final userId = json['userId']?.toString() ?? json['user_id']?.toString() ?? '';
+    final moduleId = json['moduleId']?.toString() ?? json['module_id']?.toString() ?? '';
+    final completed = json['completed'] == 1 ||
+        json['completed'] == true ||
+        (json['completed'] is bool && json['completed'] as bool);
+    final timeSpentSeconds = json['timeSpentSeconds'] is int
+        ? json['timeSpentSeconds'] as int
+        : (json['time_spent_seconds'] is int
+            ? json['time_spent_seconds'] as int
+            : int.tryParse(json['timeSpentSeconds']?.toString() ?? json['time_spent_seconds']?.toString() ?? '') ?? 0);
+    final completedAtRaw = json['completedAt'] ?? json['completed_at'];
+    final completedAt = completedAtRaw != null
+        ? DateTime.tryParse(completedAtRaw.toString())
+        : null;
+    return ModuleProgressModel(
+      id: id.isEmpty && userId.isNotEmpty && moduleId.isNotEmpty
+          ? '${userId}_$moduleId'
+          : id,
+      userId: userId,
+      moduleId: moduleId,
+      completed: completed,
+      timeSpentSeconds: timeSpentSeconds,
+      completedAt: completedAt,
+    );
+  }
 }

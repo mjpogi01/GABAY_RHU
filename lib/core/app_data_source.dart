@@ -18,7 +18,8 @@ abstract class AppDataSource {
   Future<List<ModuleModel>> getAllModules();
   Future<ModuleModel?> getModuleById(String id);
   /// Saves or updates a module. For remote (Supabase), pass [coverImageBytes] to upload cover image.
-  Future<void> saveModule(ModuleModel module, {String? localCoverImagePath, List<int>? coverImageBytes, String? coverImageExtension});
+  /// Set [clearCover] true when user removed the cover (e.g. clicked X) so DB cover_image_url is cleared.
+  Future<void> saveModule(ModuleModel module, {String? localCoverImagePath, List<int>? coverImageBytes, String? coverImageExtension, bool clearCover = false});
   Future<void> deleteModule(String id);
   Future<List<String>> getAssignedModuleIds(String userId);
   Future<void> assignModules(String userId, List<String> moduleIds);
@@ -27,6 +28,7 @@ abstract class AppDataSource {
 
   Future<List<QuestionModel>> getPreTestQuestions();
   Future<List<QuestionModel>> getPostTestQuestions();
+  Future<void> savePreTestQuestion(QuestionModel question);
 
   Future<void> ensureSeeded();
 }

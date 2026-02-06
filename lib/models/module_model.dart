@@ -8,6 +8,25 @@ class ModuleModel {
   /// Admin-defined display number (e.g. M01, 1). Shown on cards; separate from internal id.
   final String? moduleNumber;
 
+  /// Parses a numeric value from [moduleNumber] (e.g. "1", "Module 2", "M03" → 1, 2, 3). Used for sorting.
+  static int _numericFromModuleNumber(String? s) {
+    if (s == null || s.isEmpty) return 0;
+    final digits = RegExp(r'\d+').firstMatch(s);
+    if (digits != null) return int.tryParse(digits.group(0)!) ?? 0;
+    return 0;
+  }
+
+  /// Sorts modules by order, then by module number (1, 2, 3...). Use for All Modules and admin list.
+  static void sortByOrderAndNumber(List<ModuleModel> list) {
+    list.sort((a, b) {
+      final orderCompare = a.order.compareTo(b.order);
+      if (orderCompare != 0) return orderCompare;
+      final numA = _numericFromModuleNumber(a.moduleNumber);
+      final numB = _numericFromModuleNumber(b.moduleNumber);
+      return numA.compareTo(numB);
+    });
+  }
+
   const ModuleModel({
     required this.id,
     required this.title,

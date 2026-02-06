@@ -73,6 +73,7 @@ class AssessmentRepository {
       'questions',
       where: 'assessmentType = ?',
       whereArgs: ['pre'],
+      orderBy: 'order_index, id',
     );
     return rows.map((r) => _rowToQuestion(r)).toList();
   }
@@ -83,6 +84,7 @@ class AssessmentRepository {
       'questions',
       where: 'assessmentType = ?',
       whereArgs: ['post'],
+      orderBy: 'order_index, id',
     );
     return rows.map((r) => _rowToQuestion(r)).toList();
   }
@@ -91,11 +93,33 @@ class AssessmentRepository {
     return QuestionModel(
       id: r['id'] as String,
       pairedId: r['pairedId'] as String,
-      domain: r['domain'] as String,
+      domain: r['domain'] as String? ?? 'general',
       text: r['text'] as String,
       options: List<String>.from(jsonDecode(r['optionsJson'] as String)),
       correctIndex: r['correctIndex'] as int,
       explanation: r['explanation'] as String?,
+      referenceModuleId: r['referenceModuleId'] as String?,
+      orderIndex: r['order_index'] as int? ?? 0,
+    );
+  }
+
+  static Future<void> saveQuestion(QuestionModel q) async {
+    final db = await DatabaseService.database;
+    await db.insert(
+      'questions',
+      {
+        'id': q.id,
+        'pairedId': q.pairedId,
+        'domain': q.domain,
+        'text': q.text,
+        'optionsJson': jsonEncode(q.options),
+        'correctIndex': q.correctIndex,
+        'explanation': q.explanation,
+        'referenceModuleId': q.referenceModuleId,
+        'assessmentType': q.id.startsWith('pre_') ? 'pre' : 'post',
+        'order_index': q.orderIndex,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
@@ -112,7 +136,9 @@ class AssessmentRepository {
           'optionsJson': jsonEncode(q.options),
           'correctIndex': q.correctIndex,
           'explanation': q.explanation,
+          'referenceModuleId': q.referenceModuleId,
           'assessmentType': q.id.startsWith('pre_') ? 'pre' : 'post',
+          'order_index': q.orderIndex,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );

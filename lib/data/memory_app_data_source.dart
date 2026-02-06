@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/user_model.dart';
@@ -19,8 +21,12 @@ class MemoryAppDataSource implements AppDataSource {
   final Map<String, List<String>> _assignedModules = {};
 
   static const _keyUserId = 'gabay_web_user_id';
+  static const _keyModuleProgress = 'gabay_module_progress';
+  static const _keyAssessmentResults = 'gabay_assessment_results';
 
   SharedPreferences? _prefs;
+  bool _progressLoaded = false;
+  bool _assessmentResultsLoaded = false;
 
   Future<SharedPreferences> get _preferences async =>
       _prefs ??= await SharedPreferences.getInstance();
@@ -55,8 +61,34 @@ class MemoryAppDataSource implements AppDataSource {
     await prefs.remove(_keyUserId);
   }
 
+  Future<void> _loadAssessmentResultsFromPrefs() async {
+    if (_assessmentResultsLoaded) return;
+    _assessmentResultsLoaded = true;
+    try {
+      final prefs = await _preferences;
+      final json = prefs.getString(_keyAssessmentResults);
+      if (json == null || json.isEmpty) return;
+      final list = (jsonDecode(json) as List<dynamic>?)
+          ?.map((e) => AssessmentResultModel.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+      if (list != null) {
+        _assessmentResults.clear();
+        _assessmentResults.addAll(list);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveAssessmentResultsToPrefs() async {
+    try {
+      final prefs = await _preferences;
+      final json = jsonEncode(_assessmentResults.map((r) => r.toJson()).toList());
+      await prefs.setString(_keyAssessmentResults, json);
+    } catch (_) {}
+  }
+
   @override
   Future<AssessmentResultModel?> getPreTestResult(String userId) async {
+    await _loadAssessmentResultsFromPrefs();
     try {
       return _assessmentResults.lastWhere((r) =>
           r.userId == userId && r.type == 'pre_test');
@@ -67,6 +99,7 @@ class MemoryAppDataSource implements AppDataSource {
 
   @override
   Future<AssessmentResultModel?> getPostTestResult(String userId) async {
+    await _loadAssessmentResultsFromPrefs();
     try {
       return _assessmentResults.lastWhere((r) =>
           r.userId == userId && r.type == 'post_test');
@@ -77,13 +110,19 @@ class MemoryAppDataSource implements AppDataSource {
 
   @override
   Future<void> saveAssessmentResult(AssessmentResultModel result) async {
+    await _loadAssessmentResultsFromPrefs();
     _assessmentResults.removeWhere((r) =>
         r.userId == result.userId && r.type == result.type);
     _assessmentResults.add(result);
+    await _saveAssessmentResultsToPrefs();
   }
 
   @override
-  Future<List<ModuleModel>> getAllModules() async => _modules;
+  Future<List<ModuleModel>> getAllModules() async {
+    final list = List<ModuleModel>.from(_modules);
+    ModuleModel.sortByOrderAndNumber(list);
+    return list;
+  }
 
   @override
   Future<ModuleModel?> getModuleById(String id) async {
@@ -95,7 +134,7 @@ class MemoryAppDataSource implements AppDataSource {
   }
 
   @override
-  Future<void> saveModule(ModuleModel module, {String? localCoverImagePath, List<int>? coverImageBytes, String? coverImageExtension}) async {
+  Future<void> saveModule(ModuleModel module, {String? localCoverImagePath, List<int>? coverImageBytes, String? coverImageExtension, bool clearCover = false}) async {
     _modules.removeWhere((m) => m.id == module.id);
     _modules.add(module);
   }
@@ -115,20 +154,68 @@ class MemoryAppDataSource implements AppDataSource {
     _assignedModules[userId] = moduleIds;
   }
 
+  Future<void> _loadProgressFromPrefs() async {
+    if (_progressLoaded) return;
+    _progressLoaded = true;
+    try {
+      final prefs = await _preferences;
+      final json = prefs.getString(_keyModuleProgress);
+      if (json == null || json.isEmpty) return;
+      final list = (jsonDecode(json) as List<dynamic>?)
+          ?.map((e) => ModuleProgressModel.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+      if (list != null) {
+        _progress.clear();
+        _progress.addAll(list);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveProgressToPrefs() async {
+    try {
+      final prefs = await _preferences;
+      final json = jsonEncode(_progress.map((p) => p.toJson()).toList());
+      await prefs.setString(_keyModuleProgress, json);
+    } catch (_) {}
+  }
+
   @override
   Future<List<ModuleProgressModel>> getModuleProgress(String userId) async {
+    await _loadProgressFromPrefs();
     return _progress.where((p) => p.userId == userId).toList();
   }
 
   @override
   Future<void> saveModuleProgress(ModuleProgressModel progress) async {
-    _progress.removeWhere((p) => p.id == progress.id);
+    await _loadProgressFromPrefs();
+    _progress.removeWhere((p) => p.id == progress.id || (p.userId == progress.userId && p.moduleId == progress.moduleId));
     _progress.add(progress);
+    await _saveProgressToPrefs();
   }
 
   @override
-  Future<List<QuestionModel>> getPreTestQuestions() async => _preQuestions;
+  Future<List<QuestionModel>> getPreTestQuestions() async {
+    final list = List<QuestionModel>.from(_preQuestions);
+    list.sort((a, b) {
+      final o = a.orderIndex.compareTo(b.orderIndex);
+      return o != 0 ? o : a.id.compareTo(b.id);
+    });
+    return list;
+  }
 
   @override
-  Future<List<QuestionModel>> getPostTestQuestions() async => _postQuestions;
+  Future<List<QuestionModel>> getPostTestQuestions() async {
+    final list = List<QuestionModel>.from(_postQuestions);
+    list.sort((a, b) {
+      final o = a.orderIndex.compareTo(b.orderIndex);
+      return o != 0 ? o : a.id.compareTo(b.id);
+    });
+    return list;
+  }
+
+  @override
+  Future<void> savePreTestQuestion(QuestionModel question) async {
+    _preQuestions.removeWhere((q) => q.id == question.id);
+    _preQuestions.add(question);
+  }
 }

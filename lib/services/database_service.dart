@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 class DatabaseService {
   static Database? _db;
   static const String _dbName = 'gabay.db';
-  static const int _version = 4;
+  static const int _version = 6;
 
   static Future<Database> get database async {
     if (_db != null) return _db!;
@@ -50,6 +50,21 @@ class DatabaseService {
       await db.execute('INSERT INTO children_new SELECT id, caregiverId, dateOfBirth, anonymizedChildId FROM children');
       await db.execute('DROP TABLE children');
       await db.execute('ALTER TABLE children_new RENAME TO children');
+    }
+    if (oldVersion < 5) {
+      await db.execute('ALTER TABLE questions ADD COLUMN referenceModuleId TEXT');
+    }
+    if (oldVersion < 6) {
+      try {
+        await db.execute('ALTER TABLE questions ADD COLUMN domain TEXT');
+      } catch (_) {
+        // Column may already exist
+      }
+      try {
+        await db.execute('ALTER TABLE questions ADD COLUMN order_index INTEGER NOT NULL DEFAULT 0');
+      } catch (_) {
+        // Column may already exist (e.g. from fresh create at v6)
+      }
     }
     if (oldVersion < 4) {
       await db.execute('DROP TABLE IF EXISTS assigned_modules');
@@ -133,7 +148,9 @@ class DatabaseService {
         optionsJson TEXT NOT NULL,
         correctIndex INTEGER NOT NULL,
         explanation TEXT,
-        assessmentType TEXT NOT NULL
+        assessmentType TEXT NOT NULL,
+        referenceModuleId TEXT,
+        order_index INTEGER NOT NULL DEFAULT 0
       )
     ''');
     await db.execute('''

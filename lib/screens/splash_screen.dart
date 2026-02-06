@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/app_routes.dart';
 import '../core/constants.dart';
 import '../core/design_system.dart';
 import '../providers/app_provider.dart';
+
+const String _keyLastRoute = 'last_route';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -16,10 +19,22 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(seconds: 2), _navigate);
+    _scheduleNavigate();
   }
 
-  void _navigate() {
+  Future<void> _scheduleNavigate() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastRoute = prefs.getString(_keyLastRoute);
+    final isRestore = lastRoute == AppRoutes.dashboard ||
+        lastRoute == AppRoutes.adminDashboard;
+    if (!mounted) return;
+    final delay = isRestore
+        ? const Duration(milliseconds: 400)
+        : const Duration(seconds: 2);
+    Future.delayed(delay, _navigate);
+  }
+
+  Future<void> _navigate() async {
     if (!mounted) return;
     final provider = context.read<AppProvider>();
     if (provider.loading) {
@@ -34,8 +49,15 @@ class _SplashScreenState extends State<SplashScreen> {
     } else {
       route = AppRoutes.dashboard;
     }
-    
-    // Navigate directly - Hero widgets will handle the transition
+
+    final prefs = await SharedPreferences.getInstance();
+    if (route == AppRoutes.landing) {
+      await prefs.remove(_keyLastRoute);
+    } else {
+      await prefs.setString(_keyLastRoute, route);
+    }
+
+    if (!mounted) return;
     Navigator.pushReplacementNamed(context, route);
   }
 
@@ -72,7 +94,7 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
             ),
             const Spacer(flex: 2),
-            Center(
+            const Center(
               child: CircularProgressIndicator(color: DesignSystem.primary),
             ),
             SizedBox(height: DesignSystem.s(context, 48)),

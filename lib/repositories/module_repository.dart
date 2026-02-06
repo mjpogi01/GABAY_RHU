@@ -7,7 +7,7 @@ class ModuleRepository {
   static Future<List<ModuleModel>> getAllModules() async {
     final db = await DatabaseService.database;
     final rows = await db.query('modules', orderBy: 'ord ASC');
-    return rows.map((r) {
+    final list = rows.map((r) {
       final cards = jsonDecode(r['cardsJson'] as String) as List<dynamic>;
       return ModuleModel(
         id: r['id'] as String,
@@ -20,6 +20,8 @@ class ModuleRepository {
         moduleNumber: r['module_number'] as String?,
       );
     }).toList();
+    ModuleModel.sortByOrderAndNumber(list);
+    return list;
   }
 
   static Future<ModuleModel?> getModuleById(String id) async {

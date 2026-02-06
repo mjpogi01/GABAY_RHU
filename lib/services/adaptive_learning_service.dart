@@ -35,8 +35,23 @@ class AdaptiveLearningService {
       ..sort((a, b) => a.order.compareTo(b.order));
   }
 
+  /// Module IDs to assign when user got specific questions wrong (reference module per question)
+  static Set<String> getReferenceModuleIdsFromWrongAnswers(
+    List<QuestionModel> questions,
+    List<QuestionResponse> responses,
+  ) {
+    final wrongIds = responses.where((r) => !r.isCorrect).map((r) => r.questionId).toSet();
+    final refIds = <String>{};
+    for (final q in questions) {
+      if (wrongIds.contains(q.id) && q.referenceModuleId != null && q.referenceModuleId!.isNotEmpty) {
+        refIds.add(q.referenceModuleId!);
+      }
+    }
+    return refIds;
+  }
+
   /// Check if user can access post-test
-  /// Requires: all assigned modules completed, and within post-test window
+  /// Requires: all assigned modules completed, and within post-test window (or immediately in debug).
   static bool canAccessPostTest({
     required DateTime preTestCompletedAt,
     required List<String> assignedModuleIds,
@@ -45,14 +60,23 @@ class AdaptiveLearningService {
     final allAssignedCompleted = assignedModuleIds.every(
       (id) => completedModuleIds.contains(id),
     );
-    if (!allAssignedCompleted) return false;
+    if (!allAssignedCompleted) {
+      debugPrint('[PostTest] canAccessPostTest: false - not all assigned completed (assigned=$assignedModuleIds completed=$completedModuleIds)');
+      return false;
+    }
 
-    // In debug mode, allow immediate post-test for testing
-    if (kDebugMode) return true;
+    // In debug mode, allow immediate post-test (skip 54–68 day window) for testing
+    if (kDebugMode) {
+      debugPrint('[PostTest] canAccessPostTest: true (debug mode, time check skipped)');
+      return true;
+    }
 
     final daysSincePreTest = DateTime.now().difference(preTestCompletedAt).inDays;
-    return daysSincePreTest >= AppConstants.postTestMinDays &&
-        daysSincePreTest <= AppConstants.postTestMaxDays;
+    final minDays = AppConstants.postTestMinDays;
+    final maxDays = AppConstants.postTestMaxDays;
+    final inWindow = daysSincePreTest >= minDays && daysSincePreTest <= maxDays;
+    debugPrint('[PostTest] canAccessPostTest: daysSince=$daysSincePreTest min=$minDays max=$maxDays => $inWindow');
+    return inWindow;
   }
 
   /// Get post-test questions (paraphrased, same intent as pre-test)

@@ -43,7 +43,7 @@ class SqliteAppDataSource implements AppDataSource {
   Future<ModuleModel?> getModuleById(String id) => ModuleRepository.getModuleById(id);
 
   @override
-  Future<void> saveModule(ModuleModel module, {String? localCoverImagePath, List<int>? coverImageBytes, String? coverImageExtension}) =>
+  Future<void> saveModule(ModuleModel module, {String? localCoverImagePath, List<int>? coverImageBytes, String? coverImageExtension, bool clearCover = false}) =>
       ModuleRepository.saveModule(module);
 
   @override
@@ -72,6 +72,10 @@ class SqliteAppDataSource implements AppDataSource {
   @override
   Future<List<QuestionModel>> getPostTestQuestions() =>
       AssessmentRepository.getPostTestQuestions();
+
+  @override
+  Future<void> savePreTestQuestion(QuestionModel question) =>
+      AssessmentRepository.saveQuestion(question);
 
   @override
   Future<void> ensureSeeded() => SeedData.ensureSeeded();

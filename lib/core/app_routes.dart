@@ -63,9 +63,15 @@ class AppRoutes {
         return MaterialPageRoute(builder: (_) => const PreTestScreen());
       case module:
         final args = settings.arguments as Map<String, dynamic>?;
+        final allModuleIdsRaw = args?['allModuleIds'];
+        final allModuleIds = allModuleIdsRaw is List
+            ? allModuleIdsRaw.map((e) => e.toString()).toList()
+            : null;
         return MaterialPageRoute(
           builder: (_) => ModuleScreen(
             moduleId: args?['moduleId'] as String? ?? '',
+            hideTimer: args?['fromAllModules'] == true,
+            allModuleIds: allModuleIds,
           ),
         );
       case postTest:

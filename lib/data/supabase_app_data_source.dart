@@ -78,12 +78,12 @@ class SupabaseAppDataSource implements AppDataSource {
         .select()
         .eq('user_id', userId)
         .eq('type', 'pre_test')
-        .order('created_at', ascending: false)
+        .order('completed_at', ascending: false)
         .limit(1)
         .maybeSingle();
 
     if (response == null) return null;
-    return AssessmentResultModel.fromJson(response);
+    return _assessmentResultFromSupabase(response);
   }
 
   @override
@@ -93,17 +93,77 @@ class SupabaseAppDataSource implements AppDataSource {
         .select()
         .eq('user_id', userId)
         .eq('type', 'post_test')
-        .order('created_at', ascending: false)
+        .order('completed_at', ascending: false)
         .limit(1)
         .maybeSingle();
 
     if (response == null) return null;
-    return AssessmentResultModel.fromJson(response);
+    return _assessmentResultFromSupabase(response);
   }
 
   @override
   Future<void> saveAssessmentResult(AssessmentResultModel result) async {
-    await _supabase.from('assessment_results').upsert(result.toJson());
+    await _supabase.from('assessment_results').upsert(_assessmentResultToSupabase(result));
+  }
+
+  /// Map app model to Supabase row (snake_case columns).
+  static Map<String, dynamic> _assessmentResultToSupabase(AssessmentResultModel result) {
+    return {
+      'id': result.id,
+      'user_id': result.userId,
+      'type': result.type,
+      'score': result.totalCorrect,
+      'total_questions': result.totalQuestions,
+      'answers': result.responses.map((r) => r.toJson()).toList(),
+      'created_at': result.completedAt.toIso8601String(),
+      'domain_scores': result.domainScores,
+      'domain_totals': result.domainTotals,
+      'total_correct': result.totalCorrect,
+      'completed_at': result.completedAt.toIso8601String(),
+      'responses': result.responses.map((r) => r.toJson()).toList(),
+    };
+  }
+
+  /// Map Supabase row (snake_case) to app model (fromJson expects camelCase).
+  static AssessmentResultModel _assessmentResultFromSupabase(Map<String, dynamic> r) {
+    final id = r['id']?.toString() ?? '';
+    final userId = r['user_id']?.toString() ?? '';
+    final type = r['type']?.toString() ?? '';
+    final totalCorrect = r['total_correct'] is int
+        ? r['total_correct'] as int
+        : int.tryParse(r['score']?.toString() ?? '') ?? 0;
+    final totalQuestions = r['total_questions'] is int
+        ? r['total_questions'] as int
+        : int.tryParse(r['total_questions']?.toString() ?? '') ?? 0;
+    final completedAtStr = r['completed_at']?.toString() ?? r['created_at']?.toString();
+    final completedAt = completedAtStr != null && completedAtStr.isNotEmpty
+        ? DateTime.tryParse(completedAtStr) ?? DateTime.now()
+        : DateTime.now();
+    final domainScoresRaw = r['domain_scores'];
+    final domainScores = domainScoresRaw is Map
+        ? Map<String, int>.from(domainScoresRaw.map((k, v) => MapEntry(k.toString(), v is int ? v : int.tryParse(v?.toString() ?? '') ?? 0)))
+        : <String, int>{};
+    final domainTotalsRaw = r['domain_totals'];
+    final domainTotals = domainTotalsRaw is Map
+        ? Map<String, int>.from(domainTotalsRaw.map((k, v) => MapEntry(k.toString(), v is int ? v : int.tryParse(v?.toString() ?? '') ?? 0)))
+        : <String, int>{};
+    final responsesRaw = r['responses'] ?? r['answers'];
+    final responses = responsesRaw is List
+        ? (responsesRaw)
+            .map<QuestionResponse>((e) => QuestionResponse.fromJson(Map<String, dynamic>.from(e is Map ? e : <String, dynamic>{})))
+            .toList()
+        : <QuestionResponse>[];
+    return AssessmentResultModel(
+      id: id,
+      userId: userId,
+      type: type,
+      domainScores: domainScores,
+      domainTotals: domainTotals,
+      totalCorrect: totalCorrect,
+      totalQuestions: totalQuestions,
+      completedAt: completedAt,
+      responses: responses,
+    );
   }
 
   /// Maps Supabase row (id, title, domain, order_index, cards_json, cover_image_url, content) to ModuleModel
@@ -172,7 +232,9 @@ class SupabaseAppDataSource implements AppDataSource {
   @override
   Future<List<ModuleModel>> getAllModules() async {
     final response = await _supabase.from('modules').select().order('order_index');
-    return (response as List<dynamic>).map((r) => _moduleFromSupabase(r as Map<String, dynamic>)).toList();
+    final list = (response as List<dynamic>).map((r) => _moduleFromSupabase(r as Map<String, dynamic>)).toList();
+    ModuleModel.sortByOrderAndNumber(list);
+    return list;
   }
 
   @override
@@ -187,19 +249,35 @@ class SupabaseAppDataSource implements AppDataSource {
   }
 
   @override
-  Future<void> saveModule(ModuleModel module, {String? localCoverImagePath, List<int>? coverImageBytes, String? coverImageExtension}) async {
+  Future<void> saveModule(ModuleModel module, {String? localCoverImagePath, List<int>? coverImageBytes, String? coverImageExtension, bool clearCover = false}) async {
     String? coverImageUrl;
+
     if (coverImageBytes != null && coverImageBytes.isNotEmpty) {
+      // Unique public_id per upload so each module gets its own image (no cache/cross-module mix-up)
+      final uniquePublicId = '${module.id}/cover_${DateTime.now().millisecondsSinceEpoch}';
       coverImageUrl = await CloudinaryUploadService.uploadImage(
         bytes: coverImageBytes,
-        publicId: '${module.id}/cover',
+        publicId: uniquePublicId,
         folder: 'gabay/modules',
       );
-    } else if (module.cards.isNotEmpty && module.cards.first.imagePath != null && module.cards.first.imagePath!.startsWith('http')) {
-      coverImageUrl = module.cards.first.imagePath;
+      if (coverImageUrl == null) {
+        final existingCover = module.cards.isNotEmpty && module.cards.first.imagePath != null && module.cards.first.imagePath!.startsWith('http')
+            ? module.cards.first.imagePath
+            : null;
+        if (!clearCover && existingCover != null) coverImageUrl = existingCover;
+      }
+    } else if (clearCover) {
+      // User clicked X: explicitly clear cover in DB
+      coverImageUrl = null;
+    } else {
+      final existingCover = module.cards.isNotEmpty && module.cards.first.imagePath != null && module.cards.first.imagePath!.startsWith('http')
+          ? module.cards.first.imagePath
+          : null;
+      coverImageUrl = existingCover;
     }
+
     final row = _moduleToSupabase(module, coverImageUrl: coverImageUrl);
-    await _supabase.from('modules').upsert(row);
+    await _supabase.from('modules').upsert(row, onConflict: 'id');
   }
 
   @override
@@ -241,12 +319,21 @@ class SupabaseAppDataSource implements AppDataSource {
         .select()
         .eq('user_id', userId);
 
-    return response.map((json) => ModuleProgressModel.fromJson(json)).toList();
+    return response.map((json) => ModuleProgressModel.fromJson(Map<String, dynamic>.from(json))).toList();
   }
 
   @override
   Future<void> saveModuleProgress(ModuleProgressModel progress) async {
-    await _supabase.from('module_progress').upsert(progress.toJson());
+    // Postgres uses snake_case; upsert on (user_id, module_id) so completed state persists across restarts
+    final row = <String, dynamic>{
+      'user_id': progress.userId,
+      'module_id': progress.moduleId,
+      'completed': progress.completed,
+    };
+    await _supabase.from('module_progress').upsert(
+          row,
+          onConflict: 'user_id,module_id',
+        );
   }
 
   @override
@@ -254,7 +341,9 @@ class SupabaseAppDataSource implements AppDataSource {
     final response = await _supabase
         .from('questions')
         .select()
-        .eq('type', 'pre_test');
+        .eq('type', 'pre_test')
+        .order('order_index')
+        .order('id');
 
     return response.map((json) => QuestionModel.fromJson(json)).toList();
   }
@@ -264,9 +353,30 @@ class SupabaseAppDataSource implements AppDataSource {
     final response = await _supabase
         .from('questions')
         .select()
-        .eq('type', 'post_test');
+        .eq('type', 'post_test')
+        .order('order_index')
+        .order('id');
 
     return response.map((json) => QuestionModel.fromJson(json)).toList();
+  }
+
+  @override
+  Future<void> savePreTestQuestion(QuestionModel question) async {
+    final correctAnswer = question.options.isNotEmpty && question.correctIndex < question.options.length
+        ? question.options[question.correctIndex]
+        : '';
+    await _supabase.from('questions').upsert({
+      'id': question.id,
+      'type': 'pre_test',
+      'question': question.text,
+      'options': question.options,
+      'correct_answer': correctAnswer,
+      'domain': question.domain,
+      'pairedId': question.pairedId,
+      'explanation': question.explanation,
+      'referenceModuleId': question.referenceModuleId,
+      'order_index': question.orderIndex,
+    });
   }
 
   @override
